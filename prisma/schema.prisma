@@ -1,5 +1,7 @@
-// Skema database Sistem Monitoring Customer & Kontrak (Tricefy / Viewpoint)
-// Ubah file ini lalu jalankan `npx prisma migrate dev --name <nama_perubahan>`
+// Skema database SWIT Monitoring v2
+// Gabungan: SRS Sales Monitoring (Site, Alat USG, PC, ViewPoint 6, Tricefy, PO, Invoice)
+//         + alur admin (tahapan progres PO, termin/cicilan, lampiran, catatan teknis).
+// Ubah file ini lalu jalankan `npx prisma migrate dev --name <nama_perubahan>`.
 
 generator client {
   provider = "prisma-client"
@@ -10,21 +12,21 @@ datasource db {
   provider = "postgresql"
 }
 
-// ───────────────────────── Pengguna & audit ─────────────────────────
+// ═══════════════════════════ PENGGUNA & AUDIT ═══════════════════════════
 
 enum Role {
-  ADMIN // Lead SWIT: master data, cicilan, hapus data, audit log
-  USER
+  ADMIN // boleh lihat, tambah, ubah, hapus semua data
+  VIEWER // hanya lihat (disiapkan untuk pengguna baru nanti)
 }
 
 model User {
-  id           Int        @id @default(autoincrement())
+  id           Int          @id @default(autoincrement())
   name         String
-  email        String     @unique
+  email        String       @unique
   passwordHash String
-  role         Role       @default(USER)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  role         Role         @default(ADMIN)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   auditLogs    AuditLog[]
   attachments  Attachment[]
 
@@ -34,47 +36,46 @@ model User {
 model AuditLog {
   id        Int      @id @default(autoincrement())
   userId    Int?
-  action    String // CREATE, UPDATE, DELETE, LOGIN, ...
-  entity    String // Customer, PurchaseOrder, ...
+  action    String // CREATE, UPDATE, DELETE, LOGIN
+  entity    String // Customer, PurchaseOrder, Vp6Installation, ...
   entityId  Int?
-  detail    String?
+  summary   String?
+  before    Json?
+  after     Json?
   createdAt DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([entity, entityId])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
-// ───────────────────────── Master data ─────────────────────────
+// ═══════════════════════════ MASTER DATA ═══════════════════════════
 
-model Product {
-  id         Int         @id @default(autoincrement())
-  code       String      @unique // TRICEFY, VIEWPOINT
-  name       String
-  packages   Package[]
-  orderItems OrderItem[]
-
-  @@map("products")
+enum Product {
+  VIEWPOINT
+  TRICEFY
 }
 
 model Package {
-  id         Int         @id @default(autoincrement())
-  productId  Int
-  name       String
-  unit       String? // scanner, studies, lisensi
-  listPrice  Decimal?    @db.Decimal(15, 2)
-  active     Boolean     @default(true)
-  product    Product     @relation(fields: [productId], references: [id])
-  orderItems OrderItem[]
+  id                   Int                   @id @default(autoincrement())
+  product              Product
+  name                 String
+  unit                 String? // studies, scanner, lisensi
+  listPrice            Decimal?              @db.Decimal(15, 2)
+  active               Boolean               @default(true)
+  vp6Installations     Vp6Installation[]
+  tricefySubscriptions TricefySubscription[]
 
   @@map("packages")
 }
 
 model MachineModel {
-  id         Int         @id @default(autoincrement())
-  brand      String // GE, ...
-  model      String // Voluson P18, Logiq E10s, ...
-  active     Boolean     @default(true)
-  orderItems OrderItem[]
+  id      Int      @id @default(autoincrement())
+  brand   String // GE
+  model   String // Voluson P18, Logiq E10s, ...
+  active  Boolean  @default(true)
+  devices Device[]
 
   @@map("machine_models")
 }
@@ -83,14 +84,14 @@ model Stage {
   id        Int       @id @default(autoincrement())
   name      String
   sortOrder Int
-  isPayment Boolean   @default(false) // tahap pembayaran: dipecah per cicilan untuk PO cicilan
+  isPayment Boolean   @default(false) // tahap pembayaran: dipecah per invoice/termin
   active    Boolean   @default(true)
   poStages  PoStage[]
 
   @@map("stages")
 }
 
-// ───────────────────────── Customer & transaksi ─────────────────────────
+// ═══════════════════════════ CUSTOMER (= SITE) ═══════════════════════════
 
 enum CustomerType {
   RUMAH_SAKIT
@@ -99,24 +100,87 @@ enum CustomerType {
   LAINNYA
 }
 
+// Satu RS/klinik/dokter = satu Site ID GE Healthcare (BR-01)
 model Customer {
-  id        Int             @id @default(autoincrement())
-  name      String
-  type      CustomerType
-  city      String?
-  address   String?
-  picName   String?
-  phone     String?
-  email     String?
-  notes     String?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  deletedAt DateTime? // soft delete
-  orders    PurchaseOrder[]
-  sites     Site[]
+  id               Int               @id @default(autoincrement())
+  name             String
+  type             CustomerType
+  geSiteId         String?           @unique // Site ID dari GE Healthcare (boleh kosong untuk customer Tricefy saja)
+  city             String?
+  address          String?
+  contactName      String? // nama kontak / dokter
+  phone            String?
+  email            String?
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  deletedAt        DateTime?
+  devices          Device[]
+  pcs              Pc[]
+  orders           PurchaseOrder[]
+  vp6Installations Vp6Installation[]
+  tricefyAccounts  TricefyAccount[]
+  techNotes        TechNote[]
+  errorLogs        ErrorLog[]
 
   @@map("customers")
 }
+
+// ═══════════════════════════ ALAT USG & PC ═══════════════════════════
+
+model Device {
+  id                   Int                         @id @default(autoincrement())
+  customerId           Int
+  serialNumber         String                      @unique
+  machineModelId       Int?
+  notes                String?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  deletedAt            DateTime?
+  customer             Customer                    @relation(fields: [customerId], references: [id])
+  machineModel         MachineModel?               @relation(fields: [machineModelId], references: [id])
+  vp6Installations     Vp6InstallationDevice[]
+  tricefySubscriptions TricefySubscriptionDevice[]
+  errorLogs            ErrorLog[]
+
+  @@index([customerId])
+  @@map("devices")
+}
+
+enum PcSource {
+  COMPANY_RECOMMENDED // rekomendasi perusahaan
+  CUSTOMER_OWNED // milik dokter/RS
+}
+
+enum PcRole {
+  SERVER_CLIENT // klinik kecil: satu PC jadi server sekaligus client
+  SERVER
+  CLIENT
+}
+
+model Pc {
+  id            Int                 @id @default(autoincrement())
+  customerId    Int
+  hostname      String?
+  source        PcSource
+  role          PcRole
+  cpu           String?
+  ram           String?
+  storage       String?
+  vga           String?
+  os            String?
+  notes         String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  deletedAt     DateTime?
+  customer      Customer            @relation(fields: [customerId], references: [id])
+  installations Vp6InstallationPc[]
+
+  @@index([customerId])
+  @@map("pcs")
+}
+
+// ═══════════════════════════ PURCHASE ORDER & INVOICE ═══════════════════════════
 
 enum PaymentMethod {
   CASH
@@ -124,50 +188,47 @@ enum PaymentMethod {
 }
 
 model PurchaseOrder {
-  id             Int           @id @default(autoincrement())
-  customerId     Int
-  poNumber       String
-  invoiceNumber  String?
-  poDate         DateTime      @db.Date
-  paymentMethod  PaymentMethod @default(CASH)
-  price          Decimal       @db.Decimal(15, 2) // nilai deal
-  ppnPercent     Decimal?      @db.Decimal(5, 2)
-  amountReceived Decimal       @default(0) @db.Decimal(15, 2) // dihitung dari cicilan / pembayaran
-  specialNotes   String? // diskon, negosiasi, deal khusus
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  deletedAt      DateTime?
-  customer       Customer      @relation(fields: [customerId], references: [id])
-  items          OrderItem[]
-  stages         PoStage[]
-  installments   Installment[]
-  attachments    Attachment[]
+  id                   Int                   @id @default(autoincrement())
+  customerId           Int
+  poNumber             String                @unique
+  poDate               DateTime              @db.Date
+  paymentMethod        PaymentMethod         @default(CASH)
+  amount               Decimal               @db.Decimal(15, 2) // nilai PO (deal)
+  ppnPercent           Decimal?              @db.Decimal(5, 2)
+  specialNotes         String? // diskon, negosiasi, deal khusus
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  deletedAt            DateTime?
+  customer             Customer              @relation(fields: [customerId], references: [id])
+  invoices             Invoice[]
+  stages               PoStage[]
+  attachments          Attachment[]
+  vp6Installations     Vp6Installation[]
+  tricefySubscriptions TricefySubscription[]
 
   @@index([customerId])
   @@map("purchase_orders")
 }
 
-model OrderItem {
-  id             Int           @id @default(autoincrement())
-  orderId        Int
-  productId      Int
-  packageId      Int?
-  quantity       Int? // jumlah scanner / studies / lisensi (kosong = unlimited)
-  machineModelId Int?
-  serialNumber   String? // SN alat
-  triceId        String? // ID Tricefy
-  siteCode       String? // Site ID Viewpoint
-  installDate    DateTime?     @db.Date
-  contractStart  DateTime?     @db.Date
-  contractEnd    DateTime?     @db.Date
-  notes          String?
-  order          PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product        Product       @relation(fields: [productId], references: [id])
-  package        Package?      @relation(fields: [packageId], references: [id])
-  machineModel   MachineModel? @relation(fields: [machineModelId], references: [id])
+// Invoice = tagihan/termin. Cash = 1 invoice, cicilan = beberapa invoice (BR-06)
+model Invoice {
+  id            Int           @id @default(autoincrement())
+  orderId       Int
+  sequence      Int // termin ke-
+  invoiceNumber String?       @unique // diisi saat invoice terbit
+  invoiceDate   DateTime?     @db.Date
+  amount        Decimal       @db.Decimal(15, 2)
+  dueDate       DateTime      @db.Date
+  paidAt        DateTime?     @db.Date
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  order         PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  attachments   Attachment[]
 
-  @@index([orderId])
-  @@map("order_items")
+  @@unique([orderId, sequence])
+  @@index([dueDate])
+  @@map("invoices")
 }
 
 model PoStage {
@@ -183,24 +244,168 @@ model PoStage {
   @@map("po_stages")
 }
 
-model Installment {
-  id      Int           @id @default(autoincrement())
-  orderId Int
-  number  Int
-  amount  Decimal       @db.Decimal(15, 2)
-  dueDate DateTime      @db.Date
-  paidAt  DateTime?     @db.Date
-  note    String?
-  order   PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+// ═══════════════════════════ VIEWPOINT 6 ═══════════════════════════
 
-  @@unique([orderId, number])
-  @@map("installments")
+model Vp6Installation {
+  id             Int                     @id @default(autoincrement())
+  customerId     Int
+  orderId        Int?
+  packageId      Int?
+  licenseQty     Int?
+  installDate    DateTime                @db.Date
+  currentVersion String
+  apps           String? // teks dulu, nanti bisa jadi pilihan ganda (FR-05.6)
+  specialConfig  String? // hanya bila ada permintaan khusus user/dokter (BR-07)
+  price          Decimal?                @db.Decimal(15, 2)
+  notes          String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  deletedAt      DateTime?
+  customer       Customer                @relation(fields: [customerId], references: [id])
+  order          PurchaseOrder?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  package        Package?                @relation(fields: [packageId], references: [id])
+  devices        Vp6InstallationDevice[]
+  pcs            Vp6InstallationPc[]
+  versionHistory Vp6VersionHistory[]
+
+  @@index([customerId])
+  @@index([installDate])
+  @@map("vp6_installations")
+}
+
+model Vp6InstallationDevice {
+  installationId Int
+  deviceId       Int
+  installation   Vp6Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  device         Device          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@id([installationId, deviceId])
+  @@map("vp6_installation_devices")
+}
+
+model Vp6InstallationPc {
+  installationId Int
+  pcId           Int
+  installation   Vp6Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  pc             Pc              @relation(fields: [pcId], references: [id], onDelete: Cascade)
+
+  @@id([installationId, pcId])
+  @@map("vp6_installation_pcs")
+}
+
+model Vp6VersionHistory {
+  id             Int             @id @default(autoincrement())
+  installationId Int
+  fromVersion    String?
+  toVersion      String
+  changedDate    DateTime        @db.Date
+  notes          String?
+  createdAt      DateTime        @default(now())
+  installation   Vp6Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@index([installationId])
+  @@map("vp6_version_history")
+}
+
+// ═══════════════════════════ TRICEFY ═══════════════════════════
+
+model TricefyAccount {
+  id            Int                   @id @default(autoincrement())
+  customerId    Int
+  tricefyId     String                @unique // ID per akun (BR-05)
+  accountEmail  String?
+  notes         String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  deletedAt     DateTime?
+  customer      Customer              @relation(fields: [customerId], references: [id])
+  subscriptions TricefySubscription[]
+
+  @@index([customerId])
+  @@map("tricefy_accounts")
+}
+
+// Perpanjangan = langganan baru pada akun yang sama (FR-06.7)
+model TricefySubscription {
+  id             Int                         @id @default(autoincrement())
+  accountId      Int
+  orderId        Int?
+  packageId      Int?
+  quantity       Int? // jumlah studies / scanner (kosong = unlimited)
+  installDate    DateTime?                   @db.Date
+  contractDate   DateTime?                   @db.Date
+  activationDate DateTime                    @db.Date
+  endDate        DateTime                    @db.Date // default aktivasi + 3 tahun (BR-04)
+  price          Decimal?                    @db.Decimal(15, 2)
+  notes          String?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+  deletedAt      DateTime?
+  account        TricefyAccount              @relation(fields: [accountId], references: [id])
+  order          PurchaseOrder?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  package        Package?                    @relation(fields: [packageId], references: [id])
+  devices        TricefySubscriptionDevice[]
+
+  @@index([accountId])
+  @@index([endDate])
+  @@map("tricefy_subscriptions")
+}
+
+model TricefySubscriptionDevice {
+  subscriptionId Int
+  deviceId       Int
+  subscription   TricefySubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  device         Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@id([subscriptionId, deviceId])
+  @@map("tricefy_subscription_devices")
+}
+
+// ═══════════════════════════ CATATAN TEKNIS & LAMPIRAN ═══════════════════════════
+
+enum TechNoteKind {
+  INTEGRASI
+  PREFERENSI_DOKTER
+  QUICK_REPORT
+  JURNAL_GRAFIK
+  LAINNYA
+}
+
+model TechNote {
+  id         Int          @id @default(autoincrement())
+  customerId Int
+  kind       TechNoteKind
+  title      String
+  content    String
+  updatedAt  DateTime     @updatedAt
+  customer   Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("tech_notes")
+}
+
+model ErrorLog {
+  id          Int          @id @default(autoincrement())
+  customerId  Int
+  deviceId    Int?
+  occurredAt  DateTime     @db.Date
+  symptom     String
+  cause       String?
+  solution    String?
+  createdAt   DateTime     @default(now())
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  device      Device?      @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+
+  @@index([customerId])
+  @@map("error_logs")
 }
 
 enum AttachmentKind {
   PO
   BERITA_ACARA
   FAKTUR
+  INVOICE
   BUKTI_BAYAR
   ERROR
   LAINNYA
@@ -209,70 +414,19 @@ enum AttachmentKind {
 model Attachment {
   id           Int            @id @default(autoincrement())
   orderId      Int?
+  invoiceId    Int?
   errorLogId   Int?
   kind         AttachmentKind @default(LAINNYA)
-  fileName     String // nama asli
-  storedName   String         @unique // nama file di folder uploads/
+  fileName     String
+  storedName   String         @unique
   mimeType     String
   size         Int
   uploadedById Int?
   createdAt    DateTime       @default(now())
   order        PurchaseOrder? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  invoice      Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   errorLog     ErrorLog?      @relation(fields: [errorLogId], references: [id], onDelete: Cascade)
   uploadedBy   User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@map("attachments")
-}
-
-// ───────────────────────── Sisi teknis ─────────────────────────
-
-model Site {
-  id           Int          @id @default(autoincrement())
-  customerId   Int
-  name         String // mis. "Radiologi Lt. 2"
-  siteCode     String? // Site ID
-  pcInfo       String? // PC dari mana + spesifikasi
-  applications String? // aplikasi terpasang
-  notes        String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  configs      SiteConfig[]
-  errorLogs    ErrorLog[]
-
-  @@map("sites")
-}
-
-enum ConfigKind {
-  INTEGRASI
-  PREFERENSI_DOKTER
-  QUICK_REPORT
-  JURNAL_GRAFIK
-  LAINNYA
-}
-
-model SiteConfig {
-  id        Int        @id @default(autoincrement())
-  siteId    Int
-  kind      ConfigKind
-  title     String
-  content   String
-  updatedAt DateTime   @updatedAt
-  site      Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
-  @@map("site_configs")
-}
-
-model ErrorLog {
-  id          Int          @id @default(autoincrement())
-  siteId      Int
-  occurredAt  DateTime     @db.Date
-  symptom     String
-  cause       String?
-  solution    String?
-  createdAt   DateTime     @default(now())
-  site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  attachments Attachment[]
-
-  @@map("error_logs")
 }

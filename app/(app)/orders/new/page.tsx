@@ -1,33 +1,18 @@
-import { PageHeader, LinkButton, Card } from "@/components/ui";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { Card, PageHeader } from "@/components/ui";
+import { CustomerPicker } from "@/components/customer-picker";
 import { OrderForm } from "@/components/forms/order-form";
-import { orderFormOptions } from "@/lib/order-form-data";
-import { todayDate, toInputDate } from "@/lib/format";
 
 export default async function NewOrderPage({ searchParams }: PageProps<"/orders/new">) {
-  const { customerId } = await searchParams;
-  const opts = await orderFormOptions();
-  if (opts.customers.length === 0) {
-    return (
-      <>
-        <PageHeader title="PO baru" />
-        <Card>
-          <p className="text-sm text-slate-600">Belum ada customer. Tambahkan customer terlebih dahulu.</p>
-          <LinkButton className="mt-3" href="/customers/new">+ Customer baru</LinkButton>
-        </Card>
-      </>
-    );
-  }
+  const sp = await searchParams;
+  if (!sp.customerId) return <CustomerPicker title="Purchase Order baru" action="/orders/new" />;
+  const customer = await prisma.customer.findFirst({ where: { id: Number(sp.customerId), deletedAt: null } });
+  if (!customer) notFound();
   return (
     <>
-      <PageHeader title="PO baru" subtitle="Alur: customer → produk & package → tanggal → mesin → nilai → special notes" />
-      <OrderForm
-        {...opts}
-        value={{
-          customerId: typeof customerId === "string" ? customerId : "",
-          poNumber: "", invoiceNumber: "", poDate: toInputDate(todayDate()),
-          paymentMethod: "CASH", price: "", ppnPercent: "", amountReceived: "", specialNotes: "", items: [],
-        }}
-      />
+      <PageHeader title="Purchase Order baru" subtitle="Langkah 2: data PO" />
+      <Card><OrderForm customerId={customer.id} customerName={customer.name} /></Card>
     </>
   );
 }

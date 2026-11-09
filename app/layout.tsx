@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SWIT Monitoring — Beyond Medical",
-  description: "Pencatatan customer, kontrak, dan pembayaran Tricefy & Viewpoint",
+  title: "SWIT Sales Monitoring — Beyond Medical",
+  description: "Monitoring penjualan ViewPoint 6 & Tricefy",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

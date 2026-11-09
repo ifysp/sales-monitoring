@@ -1,46 +1,37 @@
-// Menghitung progress bar sebuah PO.
-// Setiap tahap aktif = 1 segmen. Untuk PO cicilan, tahap pembayaran dipecah menjadi 1 segmen per cicilan.
+// Progress bar PO: setiap tahap aktif = 1 segmen.
+// Tahap pembayaran dipecah menjadi 1 segmen per invoice/termin (cash = 1, cicilan = N).
 
 export type StageLite = { id: number; name: string; sortOrder: number; isPayment: boolean };
 export type PoStageLite = { stageId: number; completedAt: Date | null };
-export type InstallmentLite = { number: number; paidAt: Date | null; dueDate: Date };
+export type InvoiceLite = { sequence: number; paidAt: Date | null; dueDate: Date };
 
-export type Segment = { label: string; done: boolean; date: Date | null; kind: "stage" | "installment" };
+export type Segment = { label: string; done: boolean; date: Date | null };
+export type Progress = { segments: Segment[]; percent: number; current: string; complete: boolean };
 
-export type Progress = {
-  segments: Segment[];
-  percent: number;
-  current: string; // tahap yang sedang berjalan
-  complete: boolean;
-};
-
-export function computeProgress(
-  stages: StageLite[],
-  poStages: PoStageLite[],
-  paymentMethod: "CASH" | "CICILAN",
-  installments: InstallmentLite[],
-): Progress {
+export function computeProgress(stages: StageLite[], poStages: PoStageLite[], invoices: InvoiceLite[]): Progress {
   const byStage = new Map(poStages.map((p) => [p.stageId, p]));
   const segments: Segment[] = [];
-  const sorted = [...stages].sort((a, b) => a.sortOrder - b.sortOrder);
-
-  for (const st of sorted) {
-    if (st.isPayment && paymentMethod === "CICILAN") {
-      if (installments.length === 0) {
-        segments.push({ label: `${st.name} (jadwal cicilan belum diatur)`, done: false, date: null, kind: "installment" });
+  for (const st of [...stages].sort((a, b) => a.sortOrder - b.sortOrder)) {
+    if (st.isPayment) {
+      if (invoices.length === 0) {
+        segments.push({ label: `${st.name} (invoice belum dibuat)`, done: false, date: null });
       } else {
-        for (const ins of [...installments].sort((a, b) => a.number - b.number)) {
-          segments.push({ label: `Cicilan ${ins.number}`, done: !!ins.paidAt, date: ins.paidAt, kind: "installment" });
+        const many = invoices.length > 1;
+        for (const inv of [...invoices].sort((a, b) => a.sequence - b.sequence)) {
+          segments.push({ label: many ? `Termin ${inv.sequence}` : st.name, done: !!inv.paidAt, date: inv.paidAt });
         }
       }
     } else {
       const ps = byStage.get(st.id);
-      segments.push({ label: st.name, done: !!ps?.completedAt, date: ps?.completedAt ?? null, kind: "stage" });
+      segments.push({ label: st.name, done: !!ps?.completedAt, date: ps?.completedAt ?? null });
     }
   }
-
-  const doneCount = segments.filter((s) => s.done).length;
-  const percent = segments.length ? Math.round((doneCount / segments.length) * 100) : 0;
+  const done = segments.filter((s) => s.done).length;
   const next = segments.find((s) => !s.done);
-  return { segments, percent, current: next ? next.label : "Selesai", complete: !next };
+  return {
+    segments,
+    percent: segments.length ? Math.round((done / segments.length) * 100) : 0,
+    current: next ? next.label : "Selesai",
+    complete: !next,
+  };
 }

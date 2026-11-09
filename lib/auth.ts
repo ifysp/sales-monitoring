@@ -3,18 +3,17 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { readSession } from "@/lib/session";
+import { FormError } from "@/lib/forms";
 
-export type CurrentUser = { id: number; name: string; email: string; role: "ADMIN" | "USER" };
+export type CurrentUser = { id: number; name: string; email: string; role: "ADMIN" | "VIEWER" };
 
-// Dipanggil di setiap halaman/aksi yang butuh login
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const session = await readSession();
   if (!session) return null;
-  const user = await prisma.user.findUnique({
+  return prisma.user.findUnique({
     where: { id: session.userId },
     select: { id: true, name: true, email: true, role: true },
   });
-  return user;
 });
 
 export async function requireUser(): Promise<CurrentUser> {
@@ -23,8 +22,9 @@ export async function requireUser(): Promise<CurrentUser> {
   return user;
 }
 
-export async function requireAdmin(): Promise<CurrentUser> {
+// Semua aksi tambah/ubah/hapus: hanya ADMIN. VIEWER hanya bisa melihat.
+export async function requireEditor(): Promise<CurrentUser> {
   const user = await requireUser();
-  if (user.role !== "ADMIN") throw new Error("Hanya Admin (Lead SWIT) yang boleh melakukan ini.");
+  if (user.role !== "ADMIN") throw new FormError("Akun Anda hanya bisa melihat data (Viewer).");
   return user;
 }

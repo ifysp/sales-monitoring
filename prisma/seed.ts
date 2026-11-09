@@ -1,4 +1,4 @@
-// Data awal: akun, produk, package sementara, tahapan, model mesin.
+// Data awal: 2 akun Admin, package sementara, tahapan, model alat.
 // Jalankan: npx prisma db seed   (aman dijalankan ulang)
 import "dotenv/config";
 import bcrypt from "bcryptjs";
@@ -8,43 +8,39 @@ import { PrismaPg } from "@prisma/adapter-pg";
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
 async function main() {
-  // ── Pengguna (GANTI PASSWORD setelah login pertama di menu Akun) ──
+  // ── Pengguna: keduanya Admin (GANTI PASSWORD setelah login pertama di menu Pengaturan) ──
   const users = [
-    { name: "Lead SWIT", email: "lead@swit.local", password: "Admin12345", role: "ADMIN" as const },
-    { name: "Minnie", email: "minnie@swit.local", password: "User12345", role: "USER" as const },
+    { name: "Kak Sara", email: "sara@swit.local", password: "Admin12345" },
+    { name: "Minnie", email: "minnie@swit.local", password: "Admin12345" },
   ];
   for (const u of users) {
     await prisma.user.upsert({
       where: { email: u.email },
       update: {},
-      create: { name: u.name, email: u.email, role: u.role, passwordHash: await bcrypt.hash(u.password, 10) },
+      create: { name: u.name, email: u.email, role: "ADMIN", passwordHash: await bcrypt.hash(u.password, 10) },
     });
   }
 
-  // ── Produk ──
-  const tricefy = await prisma.product.upsert({ where: { code: "TRICEFY" }, update: {}, create: { code: "TRICEFY", name: "Tricefy" } });
-  const viewpoint = await prisma.product.upsert({ where: { code: "VIEWPOINT" }, update: {}, create: { code: "VIEWPOINT", name: "Viewpoint 6" } });
-
-  // ── Package sementara (ubah di menu Master Data) ──
+  // ── Package sementara (ubah di Pengaturan → Master data) ──
   if ((await prisma.package.count()) === 0) {
     await prisma.package.createMany({
       data: [
-        { productId: tricefy.id, name: "Scanner license", unit: "scanner" },
-        { productId: tricefy.id, name: "Basic license", unit: "lisensi" },
-        { productId: tricefy.id, name: "Studies 1000", unit: "studies" },
-        { productId: tricefy.id, name: "Unlimited", unit: null },
-        { productId: tricefy.id, name: "Custom", unit: null },
-        { productId: viewpoint.id, name: "Obgyn Basic", unit: "lisensi" },
-        { productId: viewpoint.id, name: "Obgyn Analytic", unit: "lisensi" },
-        { productId: viewpoint.id, name: "Radiologi Basic", unit: "lisensi" },
-        { productId: viewpoint.id, name: "Radiologi Analytic", unit: "lisensi" },
-        { productId: viewpoint.id, name: "Cardio", unit: "lisensi" },
-        { productId: viewpoint.id, name: "Custom", unit: "lisensi" },
+        { product: "TRICEFY", name: "Scanner license", unit: "scanner" },
+        { product: "TRICEFY", name: "Basic license", unit: "lisensi" },
+        { product: "TRICEFY", name: "Studies 1000", unit: "studies" },
+        { product: "TRICEFY", name: "Unlimited" },
+        { product: "TRICEFY", name: "Custom" },
+        { product: "VIEWPOINT", name: "Obgyn Basic", unit: "lisensi" },
+        { product: "VIEWPOINT", name: "Obgyn Analytic", unit: "lisensi" },
+        { product: "VIEWPOINT", name: "Radiologi Basic", unit: "lisensi" },
+        { product: "VIEWPOINT", name: "Radiologi Analytic", unit: "lisensi" },
+        { product: "VIEWPOINT", name: "Cardio", unit: "lisensi" },
+        { product: "VIEWPOINT", name: "Custom", unit: "lisensi" },
       ],
     });
   }
 
-  // ── Tahapan progres ──
+  // ── Tahapan progres PO (tahap "Payment" dipecah otomatis per invoice/termin) ──
   if ((await prisma.stage.count()) === 0) {
     await prisma.stage.createMany({
       data: [
@@ -58,27 +54,16 @@ async function main() {
     });
   }
 
-  // ── Model mesin USG ──
+  // ── Model alat USG ──
   if ((await prisma.machineModel.count()) === 0) {
     await prisma.machineModel.createMany({
-      data: [
-        { brand: "GE", model: "Voluson P18" },
-        { brand: "GE", model: "Voluson E10" },
-        { brand: "GE", model: "Voluson Expert 22" },
-        { brand: "GE", model: "Voluson Signature 20" },
-        { brand: "GE", model: "Logiq E10s" },
-        { brand: "GE", model: "Logiq P9" },
-        { brand: "GE", model: "Vivid E95" },
-      ],
+      data: ["Voluson P18", "Voluson E10", "Voluson Expert 22", "Voluson Signature 20", "Logiq E10s", "Logiq P9", "Vivid E95"].map((model) => ({ brand: "GE", model })),
     });
   }
 
-  console.log("Seed selesai. Login: lead@swit.local / Admin12345 (Admin), minnie@swit.local / User12345 (User)");
+  console.log("Seed selesai. Login: sara@swit.local / minnie@swit.local, password awal Admin12345");
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
+  .catch((e) => { console.error(e); process.exit(1); })
   .finally(() => prisma.$disconnect());

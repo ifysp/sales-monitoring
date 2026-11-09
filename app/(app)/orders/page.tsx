@@ -1,65 +1,59 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { ordersWithProgress, productSummary } from "@/lib/queries";
+import { customerOptions, listOrders, toFilters } from "@/lib/queries";
 import { PAYMENT_LABEL, rupiah, tanggal } from "@/lib/format";
-import { Badge, Button, Card, Empty, Input, LinkButton, PageHeader, Select, Table } from "@/components/ui";
+import { Badge, Card, Empty, FilterBar, FilterField, Input, LinkButton, PageHeader, Select, Table } from "@/components/ui";
 import { ProgressBar } from "@/components/progress-bar";
-import type { Prisma } from "@/generated/prisma/client";
 
 export default async function OrdersPage({ searchParams }: PageProps<"/orders">) {
-  const sp = await searchParams;
-  const q = typeof sp.q === "string" ? sp.q.trim() : "";
-  const status = typeof sp.status === "string" ? sp.status : "";
-  const product = typeof sp.product === "string" ? sp.product : "";
-  const method = typeof sp.method === "string" ? sp.method : "";
-
-  const where: Prisma.PurchaseOrderWhereInput = {
-    ...(q ? { OR: [{ poNumber: { contains: q, mode: "insensitive" } }, { customer: { name: { contains: q, mode: "insensitive" } } }] } : {}),
-    ...(product ? { items: { some: { productId: Number(product) } } } : {}),
-    ...(method === "CASH" || method === "CICILAN" ? { paymentMethod: method } : {}),
-  };
-  const [all, products] = await Promise.all([ordersWithProgress(where), prisma.product.findMany()]);
-  const orders = all.filter((o) => (status === "open" ? !o.progress.complete : status === "done" ? o.progress.complete : true));
-
+  const f = toFilters(await searchParams);
+  const [orders, customers] = await Promise.all([listOrders(f), customerOptions()]);
+  const qs = new URLSearchParams(f as Record<string, string>).toString();
+  const total = orders.reduce((s, o) => s + o.amountNum, 0);
   return (
     <>
-      <PageHeader title="Purchase Order" subtitle={`${orders.length} PO`} actions={<LinkButton href="/orders/new">+ PO baru</LinkButton>} />
+      <PageHeader title="Purchase Order" subtitle={`${orders.length} PO · total ${rupiah(total)}`} actions={<LinkButton href="/orders/new">+ PO baru</LinkButton>} />
       <Card>
-        <form className="mb-4 grid gap-2 sm:grid-cols-5">
-          <Input name="q" defaultValue={q} placeholder="Cari no. PO / customer" className="sm:col-span-2" />
-          <Select name="status" defaultValue={status}>
-            <option value="">Semua status</option>
-            <option value="open">Berjalan</option>
-            <option value="done">Selesai (Clear)</option>
-          </Select>
-          <Select name="product" defaultValue={product}>
-            <option value="">Semua produk</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
-          <div className="flex gap-2">
-            <Select name="method" defaultValue={method}>
-              <option value="">Cash & cicilan</option>
+        <FilterBar exportHref={`/api/export/orders?${qs}`}>
+          <FilterField label="Cari"><Input name="q" defaultValue={f.q} placeholder="No. PO / invoice / customer" className="w-56" /></FilterField>
+          <FilterField label="Customer">
+            <Select name="customer" defaultValue={f.customer ?? ""} className="w-52">
+              <option value="">Semua</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+          </FilterField>
+          <FilterField label="Status">
+            <Select name="status" defaultValue={f.status ?? ""} className="w-36">
+              <option value="">Semua</option>
+              <option value="open">Berjalan</option>
+              <option value="done">Selesai</option>
+            </Select>
+          </FilterField>
+          <FilterField label="Bayar">
+            <Select name="method" defaultValue={f.method ?? ""} className="w-32">
+              <option value="">Semua</option>
               <option value="CASH">Cash</option>
               <option value="CICILAN">Cicilan</option>
             </Select>
-            <Button variant="outline">Filter</Button>
-          </div>
-        </form>
+          </FilterField>
+          <FilterField label="Tanggal PO dari"><Input type="date" name="from" defaultValue={f.from} className="w-40" /></FilterField>
+          <FilterField label="sampai"><Input type="date" name="to" defaultValue={f.to} className="w-40" /></FilterField>
+        </FilterBar>
         {orders.length === 0 ? <Empty>Tidak ada PO.</Empty> : (
           <Table>
-            <thead><tr><th>Tanggal PO</th><th>Customer / PO</th><th>Produk</th><th>Bayar</th><th className="text-right">Nilai</th><th className="text-right">Diterima</th><th>Progres</th></tr></thead>
+            <thead><tr><th>Tanggal</th><th>Customer / PO</th><th>Isi</th><th>Bayar</th><th className="text-right">Nilai</th><th className="text-right">Lunas</th><th>Progres</th></tr></thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
                   <td className="whitespace-nowrap">{tanggal(o.poDate)}</td>
-                  <td>
-                    <Link className="font-medium text-teal-800 hover:underline" href={`/orders/${o.id}`}>{o.customer.name}</Link>
-                    <div className="text-xs text-slate-500">PO {o.poNumber}</div>
+                  <td><Link className="font-medium text-teal-800 hover:underline" href={`/orders/${o.id}`}>{o.customer.name}</Link><div className="text-xs text-slate-500">PO {o.poNumber}</div></td>
+                  <td className="text-xs">
+                    {o.vp6Installations.length > 0 && <Badge tone="teal">VP6 ×{o.vp6Installations.length}</Badge>}{" "}
+                    {o.tricefySubscriptions.length > 0 && <Badge tone="blue">Tricefy ×{o.tricefySubscriptions.length}</Badge>}
+                    {o.vp6Installations.length + o.tricefySubscriptions.length === 0 && <span className="text-slate-400">belum diisi</span>}
                   </td>
-                  <td className="max-w-xs text-slate-600">{productSummary(o)}</td>
-                  <td><Badge tone={o.paymentMethod === "CICILAN" ? "blue" : "slate"}>{PAYMENT_LABEL[o.paymentMethod]}</Badge></td>
-                  <td className="whitespace-nowrap text-right">{rupiah(Number(o.price))}</td>
-                  <td className="whitespace-nowrap text-right">{rupiah(Number(o.amountReceived))}</td>
+                  <td>{PAYMENT_LABEL[o.paymentMethod]}</td>
+                  <td className="whitespace-nowrap text-right">{rupiah(o.amountNum)}</td>
+                  <td className="whitespace-nowrap text-right">{rupiah(o.paid)}</td>
                   <td className="w-64"><ProgressBar progress={o.progress} /></td>
                 </tr>
               ))}

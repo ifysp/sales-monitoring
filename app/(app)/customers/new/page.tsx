@@ -4,7 +4,7 @@ import { CustomerForm } from "@/components/forms/customer-form";
 export default function NewCustomerPage() {
   return (
     <>
-      <PageHeader title="Customer baru" />
+      <PageHeader title="Customer / Site baru" />
       <Card><CustomerForm /></Card>
     </>
   );

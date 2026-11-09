@@ -12,11 +12,9 @@ export async function login(_: ActionState, fd: FormData): Promise<ActionState> 
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-    return { error: "Email atau password salah." };
-  }
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) return { error: "Email atau password salah." };
   await createSession(user.id);
-  await audit(user.id, "LOGIN", "User", user.id);
+  await audit({ userId: user.id, action: "LOGIN", entity: "User", entityId: user.id, summary: "Login" });
   redirect("/");
 }
 
@@ -35,7 +33,7 @@ export async function changePassword(_: ActionState, fd: FormData): Promise<Acti
     const user = await prisma.user.findUniqueOrThrow({ where: { id: me.id } });
     if (!(await bcrypt.compare(current, user.passwordHash))) throw new FormError("Password lama salah.");
     await prisma.user.update({ where: { id: me.id }, data: { passwordHash: await bcrypt.hash(next, 10) } });
-    await audit(me.id, "UPDATE", "User", me.id, "Ganti password");
+    await audit({ userId: me.id, action: "UPDATE", entity: "User", entityId: me.id, summary: "Ganti password" });
     return { ok: "Password berhasil diganti." };
   });
 }

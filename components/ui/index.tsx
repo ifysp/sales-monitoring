@@ -114,3 +114,75 @@ export function DL({ items }: { items: [string, ReactNode][] }) {
     </dl>
   );
 }
+
+// Tab berbasis URL (?tab=...) — bisa di-bookmark & dibagikan
+export function Tabs({ base, current, tabs }: { base: string; current: string; tabs: { key: string; label: string; count?: number }[] }) {
+  return (
+    <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
+      {tabs.map((t) => (
+        <Link
+          key={t.key}
+          href={t.key === tabs[0].key ? base : `${base}?tab=${t.key}`}
+          className={cn(
+            "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm",
+            current === t.key ? "border-teal-700 font-medium text-teal-800" : "border-transparent text-slate-600 hover:text-slate-900",
+          )}
+        >
+          {t.label}
+          {t.count !== undefined && <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 text-xs text-slate-600">{t.count}</span>}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+export function StatCard({ label, value, sub, tone, href, icon }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "red" | "amber" | "teal"; href?: string; icon?: ReactNode }) {
+  const body = (
+    <div className="h-full rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300">
+      <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-slate-500">
+        <span>{label}</span>
+        <span className="text-slate-400">{icon}</span>
+      </div>
+      <div className={cn("mt-1 text-xl font-semibold tabular-nums [overflow-wrap:anywhere] 2xl:text-2xl", tone === "red" ? "text-red-600" : tone === "amber" ? "text-amber-600" : tone === "teal" ? "text-teal-700" : "text-slate-900")}>{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
+    </div>
+  );
+  return href ? <Link href={href} className="block">{body}</Link> : body;
+}
+
+export function TricefyBadge({ status, daysLeft }: { status: "AKTIF" | "AKAN_HABIS" | "KEDALUWARSA"; daysLeft: number }) {
+  if (status === "KEDALUWARSA") return <Badge tone="red">Kedaluwarsa {Math.abs(daysLeft)} hari</Badge>;
+  if (status === "AKAN_HABIS") return <Badge tone={daysLeft <= 30 ? "red" : "amber"}>Akan habis · {daysLeft} hari</Badge>;
+  return <Badge tone="green">Aktif · {daysLeft} hari</Badge>;
+}
+
+export function InvoiceBadge({ paidAt, dueDate, today }: { paidAt: Date | null; dueDate: Date; today: Date }) {
+  if (paidAt) return <Badge tone="green">Lunas</Badge>;
+  if (dueDate < today) return <Badge tone="red">Terlambat</Badge>;
+  if (dueDate.getTime() - today.getTime() <= 7 * 86400000) return <Badge tone="amber">Segera jatuh tempo</Badge>;
+  return <Badge>Belum dibayar</Badge>;
+}
+
+// Baris filter standar (form GET) + tombol export Excel dengan filter yang sama (FR-09.3)
+export function FilterBar({ children, exportHref }: { children: ReactNode; exportHref?: string }) {
+  return (
+    <form className="mb-4 flex flex-wrap items-end gap-2">
+      {children}
+      <button className={buttonClass("outline")}>Terapkan</button>
+      {exportHref && (
+        <a href={exportHref} className={buttonClass("ghost") + " ml-auto"}>
+          ⬇ Export Excel
+        </a>
+      )}
+    </form>
+  );
+}
+
+export function FilterField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="text-xs">
+      <span className="mb-1 block font-medium text-slate-600">{label}</span>
+      {children}
+    </label>
+  );
+}

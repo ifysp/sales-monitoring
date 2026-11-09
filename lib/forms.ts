@@ -47,7 +47,31 @@ export async function handle<T extends { error?: string; ok?: string } | undefin
     return await fn();
   } catch (e) {
     if (e instanceof FormError) return { error: e.message };
-    if (e instanceof Error && e.message.startsWith("Hanya Admin")) return { error: e.message };
+    if (isUniqueError(e)) return { error: uniqueMessage(e) };
     throw e;
   }
+}
+
+// Pelanggaran data unik (Site ID, SN, ID Tricefy, No. PO, No. Invoice) → pesan yang jelas (NFR-07)
+const UNIQUE_LABEL: Record<string, string> = {
+  geSiteId: "Site ID GE", serialNumber: "Serial number alat", tricefyId: "ID Tricefy",
+  poNumber: "Nomor PO", invoiceNumber: "Nomor invoice", email: "Email",
+};
+function isUniqueError(e: unknown): e is { code: string; meta?: unknown; message: string } {
+  return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
+}
+function uniqueMessage(e: { meta?: unknown; message: string }): string {
+  const text = JSON.stringify(e.meta ?? "") + e.message;
+  const key = Object.keys(UNIQUE_LABEL).find((k) => text.includes(k));
+  return `${key ? UNIQUE_LABEL[key] : "Data"} sudah dipakai oleh data lain. Nilainya harus unik.`;
+}
+
+export function ids(fd: FormData, key: string): number[] {
+  return fd.getAll(key).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+}
+
+// Soft delete: kunci unik (Site ID, SN, ID Tricefy, No. PO) diberi akhiran agar nilainya bisa dipakai lagi.
+// Nilai asli tetap tersimpan di audit log (kolom "before").
+export function freeKey(value: string | null, id: number): string | null {
+  return value ? `${value}~hapus#${id}` : null;
 }
