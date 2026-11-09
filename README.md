@@ -18,14 +18,16 @@ Pastikan sudah ter-install di laptop:
 Ekstrak zip, buka foldernya di VS Code, lalu buka terminal (`Ctrl + ~`):
 
 ```powershell
-# 1) Install semua library (otomatis juga menjalankan "prisma generate")
-npm install
-
-# 2) Buat file .env dari contoh, lalu edit password PostgreSQL di dalamnya
+# 1) Buat file .env dari contoh (WAJIB sebelum npm install)
 copy .env.example .env
 ```
 
-Buka `.env` dan ganti `PASSWORD_ANDA` dengan password PostgreSQL Anda.
+Buka `.env` dan ganti `PASSWORD_ANDA` dengan password PostgreSQL Anda. Lalu:
+
+```powershell
+# 2) Install semua library (otomatis juga menjalankan "prisma generate")
+npm install
+```
 
 ## 3. Isi database — pilih SALAH SATU cara
 
