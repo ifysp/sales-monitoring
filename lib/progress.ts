@@ -35,3 +35,55 @@ export function computeProgress(stages: StageLite[], poStages: PoStageLite[], in
     complete: !next,
   };
 }
+
+// ───────── Aturan urutan (tahapan tidak boleh dilompati) ─────────
+// - Tahap hanya bisa diselesaikan bila semua tahap sebelumnya sudah selesai.
+// - Tahap hanya bisa dibatalkan bila tahap sesudahnya belum dimulai.
+// - Tahap pembayaran = invoice: termin dibayar berurutan, setelah tahap sebelum pembayaran selesai.
+// - Tahap sesudah pembayaran (mis. Clear) baru bisa setelah semua termin lunas.
+
+export type StageFlow = StageLite & { done: boolean; date: Date | null; canComplete: boolean; canUndo: boolean; blockedBy: string | null };
+export type Flow = {
+  stages: StageFlow[];
+  payReady: boolean; // semua tahap sebelum pembayaran sudah selesai
+  nextPaySeq: number | null; // termin yang boleh ditandai lunas berikutnya
+  lastPaidSeq: number | null; // termin lunas terakhir (yang boleh dibatalkan)
+  canUndoPay: boolean; // tahap sesudah pembayaran belum dimulai
+};
+
+export function computeFlow(stages: StageLite[], poStages: PoStageLite[], invoices: InvoiceLite[]): Flow {
+  const byStage = new Map(poStages.map((p) => [p.stageId, p]));
+  const sorted = [...stages].sort((a, b) => a.sortOrder - b.sortOrder);
+  const inv = [...invoices].sort((a, b) => a.sequence - b.sequence);
+  const allPaid = inv.length > 0 && inv.every((i) => i.paidAt);
+  const anyPaid = inv.some((i) => i.paidAt);
+  const isDone = (s: StageLite) => (s.isPayment ? allPaid : !!byStage.get(s.id)?.completedAt);
+  const isStarted = (s: StageLite) => (s.isPayment ? anyPaid : !!byStage.get(s.id)?.completedAt);
+
+  const flow = sorted.map((s, i) => {
+    const before = sorted.slice(0, i);
+    const after = sorted.slice(i + 1);
+    const firstUndone = before.find((b) => !isDone(b));
+    const done = isDone(s);
+    return {
+      ...s,
+      done,
+      date: s.isPayment ? null : byStage.get(s.id)?.completedAt ?? null,
+      canComplete: !s.isPayment && !done && !firstUndone,
+      canUndo: !s.isPayment && done && !after.some(isStarted),
+      blockedBy: !done && firstUndone ? firstUndone.name : null,
+    };
+  });
+  const payIdx = sorted.findIndex((s) => s.isPayment);
+  const payReady = payIdx < 0 || sorted.slice(0, payIdx).every(isDone);
+  const afterPay = payIdx < 0 ? [] : sorted.slice(payIdx + 1);
+  const nextUnpaid = inv.find((i) => !i.paidAt);
+  const lastPaid = [...inv].reverse().find((i) => i.paidAt);
+  return {
+    stages: flow,
+    payReady,
+    nextPaySeq: payReady && nextUnpaid ? nextUnpaid.sequence : null,
+    lastPaidSeq: lastPaid ? lastPaid.sequence : null,
+    canUndoPay: !afterPay.some(isStarted),
+  };
+}

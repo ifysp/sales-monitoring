@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { activeStages } from "@/lib/queries";
-import { computeProgress } from "@/lib/progress";
+import { computeFlow, computeProgress } from "@/lib/progress";
 import { tricefyStatus } from "@/lib/tricefy";
 import {
   deleteAttachment, deleteInvoice, deleteOrder, saveInvoice, setInvoicePaid, setInvoicePlan, setStage, uploadAttachment,
@@ -40,6 +40,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/orders/[id
   const paid = o.invoices.filter((i) => i.paidAt).reduce((s, i) => s + Number(i.amount), 0);
   const ppn = o.ppnPercent === null ? null : Number(o.ppnPercent);
   const byStage = new Map(o.stages.map((s) => [s.stageId, s]));
+  const flow = computeFlow(stages, o.stages, o.invoices);
   const canReplan = !o.invoices.some((i) => i.paidAt || i.invoiceNumber);
 
   return (
@@ -64,32 +65,38 @@ export default async function OrderDetailPage({ params }: PageProps<"/orders/[id
           <Table>
             <thead><tr><th>Tahap</th><th>Status</th><th>Aksi</th></tr></thead>
             <tbody>
-              {stages.map((st) => {
+              {flow.stages.map((st) => {
                 const ps = byStage.get(st.id);
+                const paidCount = o.invoices.filter((i) => i.paidAt).length;
                 return (
-                  <tr key={st.id}>
+                  <tr key={st.id} className={!st.done && !st.canComplete && !st.isPayment ? "text-slate-400" : undefined}>
                     <td className="whitespace-nowrap font-medium">{st.name}</td>
                     <td>
                       {st.isPayment
-                        ? <Badge tone={o.invoices.length && o.invoices.every((i) => i.paidAt) ? "green" : "slate"}>{o.invoices.filter((i) => i.paidAt).length}/{o.invoices.length} termin lunas</Badge>
-                        : ps?.completedAt ? <Badge tone="green">Selesai {tanggal(ps.completedAt)}</Badge> : <Badge>Belum</Badge>}
+                        ? <Badge tone={st.done ? "green" : "slate"}>{paidCount}/{o.invoices.length} termin lunas</Badge>
+                        : st.done ? <Badge tone="green">Selesai {tanggal(st.date)}</Badge> : st.canComplete ? <Badge tone="amber">Giliran tahap ini</Badge> : <Badge>Belum</Badge>}
                       {ps?.note && <div className="mt-1 text-xs text-slate-500">{ps.note}</div>}
                     </td>
                     <td>
-                      {st.isPayment ? <span className="text-xs text-slate-500">Mengikuti invoice di bawah</span>
-                        : ps?.completedAt ? (
-                          <ActionForm action={setStage}>
-                            <input type="hidden" name="orderId" value={o.id} /><input type="hidden" name="stageId" value={st.id} /><input type="hidden" name="undo" value="1" />
-                            <SubmitButton variant="ghost" small>Batalkan</SubmitButton>
-                          </ActionForm>
-                        ) : (
-                          <ActionForm action={setStage} className="flex items-center gap-2">
-                            <input type="hidden" name="orderId" value={o.id} /><input type="hidden" name="stageId" value={st.id} />
-                            <Input type="date" name="completedAt" defaultValue={todayStr} className="w-36" />
-                            <Input name="note" placeholder="Catatan" className="w-32" />
-                            <SubmitButton small>Selesai</SubmitButton>
-                          </ActionForm>
-                        )}
+                      {st.isPayment ? (
+                        <span className="text-xs text-slate-500">{flow.payReady ? "Tandai lunas per termin di bagian Invoice" : "Terbuka setelah tahap sebelumnya selesai"}</span>
+                      ) : st.canUndo ? (
+                        <ActionForm key={`undo-${st.id}`} action={setStage}>
+                          <input type="hidden" name="orderId" value={o.id} /><input type="hidden" name="stageId" value={st.id} /><input type="hidden" name="undo" value="1" />
+                          <SubmitButton variant="ghost" small>Batalkan</SubmitButton>
+                        </ActionForm>
+                      ) : st.canComplete ? (
+                        <ActionForm key={`done-${st.id}`} action={setStage} className="flex items-center gap-2">
+                          <input type="hidden" name="orderId" value={o.id} /><input type="hidden" name="stageId" value={st.id} />
+                          <Input type="date" name="completedAt" defaultValue={todayStr} className="w-36" />
+                          <Input name="note" placeholder="Catatan" className="w-32" />
+                          <SubmitButton small>Selesai</SubmitButton>
+                        </ActionForm>
+                      ) : st.done ? (
+                        <span className="text-xs text-slate-500">Terkunci — tahap sesudahnya sudah berjalan</span>
+                      ) : (
+                        <span className="text-xs">Menunggu &quot;{st.blockedBy}&quot;</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -156,13 +163,17 @@ export default async function OrderDetailPage({ params }: PageProps<"/orders/[id
                   <td><InvoiceBadge paidAt={inv.paidAt} dueDate={inv.dueDate} today={today} />{inv.paidAt && <div className="text-xs text-slate-500">{tanggal(inv.paidAt)}</div>}</td>
                   <td className="space-y-1.5">
                     {inv.paidAt ? (
-                      <ActionForm action={setInvoicePaid}><input type="hidden" name="id" value={inv.id} /><input type="hidden" name="undo" value="1" /><SubmitButton variant="ghost" small>Batal lunas</SubmitButton></ActionForm>
-                    ) : (
-                      <ActionForm action={setInvoicePaid} className="flex items-center gap-2">
+                      inv.sequence === flow.lastPaidSeq && flow.canUndoPay ? (
+                        <ActionForm key={`unpay-${inv.id}`} action={setInvoicePaid}><input type="hidden" name="id" value={inv.id} /><input type="hidden" name="undo" value="1" /><SubmitButton variant="ghost" small>Batal lunas</SubmitButton></ActionForm>
+                      ) : null
+                    ) : inv.sequence === flow.nextPaySeq ? (
+                      <ActionForm key={`pay-${inv.id}`} action={setInvoicePaid} className="flex items-center gap-2">
                         <input type="hidden" name="id" value={inv.id} />
                         <Input type="date" name="paidAt" defaultValue={todayStr} className="w-36" />
                         <SubmitButton small>Lunas</SubmitButton>
                       </ActionForm>
+                    ) : (
+                      <span className="text-xs text-slate-500">{flow.payReady ? `Setelah termin ${flow.nextPaySeq} lunas` : "Setelah tukar faktur selesai"}</span>
                     )}
                     <details>
                       <summary className="cursor-pointer text-xs text-teal-800">Edit / lampiran</summary>
@@ -182,7 +193,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/orders/[id
                           <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png" required className={fileInput + " w-56"} />
                           <SubmitButton small variant="outline">Unggah</SubmitButton>
                         </ActionForm>
-                        <ConfirmDelete action={deleteInvoice.bind(null, inv.id)} what={`termin ${inv.sequence}`} label="Hapus termin" />
+                        {!inv.paidAt && <ConfirmDelete action={deleteInvoice.bind(null, inv.id)} what={`termin ${inv.sequence}`} label="Hapus termin" />}
                       </div>
                     </details>
                   </td>

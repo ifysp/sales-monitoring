@@ -7,10 +7,20 @@ import { audit } from "@/lib/audit";
 import { handle, req, str, num, date, int, freeKey, FormError } from "@/lib/forms";
 import { saveUpload, removeUpload } from "@/lib/uploads";
 import { addDays, addMonths } from "@/lib/format";
+import { computeFlow } from "@/lib/progress";
 import type { ActionState } from "@/components/client";
 import type { AttachmentKind, PaymentMethod } from "@/generated/prisma/client";
 
 const orderPath = (id: number) => revalidatePath(`/orders/${id}`);
+
+// Status urutan tahapan & termin sebuah PO, dihitung dari database (validasi di server)
+async function orderFlow(orderId: number) {
+  const [stages, order] = await Promise.all([
+    prisma.stage.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.purchaseOrder.findUniqueOrThrow({ where: { id: orderId }, include: { stages: true, invoices: true } }),
+  ]);
+  return computeFlow(stages, order.stages, order.invoices);
+}
 
 export async function saveOrder(_: ActionState, fd: FormData): Promise<ActionState> {
   const r = await handle(async () => {
@@ -78,6 +88,12 @@ export async function setStage(_: ActionState, fd: FormData): Promise<ActionStat
     if (!undo && !completedAt) throw new FormError("Isi tanggal selesai tahap.");
     const note = str(fd, "note");
     const stage = await prisma.stage.findUniqueOrThrow({ where: { id: stageId } });
+    const flow = (await orderFlow(orderId)).stages.find((s) => s.id === stageId);
+    if (!flow || stage.isPayment) throw new FormError("Tahap pembayaran mengikuti status invoice.");
+    if (!undo && !flow.canComplete) {
+      throw new FormError(flow.done ? `Tahap ${stage.name} sudah selesai.` : `Selesaikan dulu tahap "${flow.blockedBy}" — tahapan harus berurutan.`);
+    }
+    if (undo && !flow.canUndo) throw new FormError(`Tahap ${stage.name} tidak bisa dibatalkan karena tahap sesudahnya sudah berjalan. Batalkan dari tahap terakhir.`);
     await prisma.poStage.upsert({
       where: { orderId_stageId: { orderId, stageId } },
       create: { orderId, stageId, completedAt, note },
@@ -159,6 +175,15 @@ export async function setInvoicePaid(_: ActionState, fd: FormData): Promise<Acti
     const paidAt = undo ? null : date(fd, "paidAt");
     if (!undo && !paidAt) throw new FormError("Isi tanggal bayar.");
     const before = await prisma.invoice.findUniqueOrThrow({ where: { id } });
+    const flow = await orderFlow(before.orderId);
+    if (!undo) {
+      if (before.paidAt) throw new FormError("Termin ini sudah lunas.");
+      if (!flow.payReady) throw new FormError("Selesaikan dulu tahapan sebelum Payment (berita acara, aktivasi, tukar faktur).");
+      if (flow.nextPaySeq !== before.sequence) throw new FormError(`Lunasi dulu termin ${flow.nextPaySeq} — termin harus berurutan.`);
+    } else {
+      if (flow.lastPaidSeq !== before.sequence) throw new FormError("Batalkan dari termin lunas yang terakhir.");
+      if (!flow.canUndoPay) throw new FormError("Tahap sesudah Payment sudah berjalan. Batalkan tahap itu dulu.");
+    }
     const inv = await prisma.invoice.update({ where: { id }, data: { paidAt } });
     await audit({ userId: me.id, action: "UPDATE", entity: "Invoice", entityId: id, summary: `Termin ${inv.sequence} ${undo ? "batal lunas" : "lunas"}`, before, after: inv });
     orderPath(inv.orderId);
@@ -170,6 +195,8 @@ export async function setInvoicePaid(_: ActionState, fd: FormData): Promise<Acti
 export async function deleteInvoice(id: number): Promise<ActionState> {
   return handle(async () => {
     const me = await requireEditor();
+    const target = await prisma.invoice.findUniqueOrThrow({ where: { id } });
+    if (target.paidAt) throw new FormError("Termin yang sudah lunas tidak bisa dihapus. Batalkan status lunasnya dulu.");
     const files = await prisma.attachment.findMany({ where: { invoiceId: id } });
     const inv = await prisma.invoice.delete({ where: { id } });
     for (const f of files) await removeUpload(f.storedName);
