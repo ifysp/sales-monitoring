@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireEditor } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { handle, req, str, num, int, date, ids, freeKey, FormError } from "@/lib/forms";
+import { handle, req, str, date, ids, freeKey, FormError } from "@/lib/forms";
 import { defaultEndDate } from "@/lib/tricefy";
 import type { ActionState } from "@/components/client";
 
@@ -20,13 +20,10 @@ export async function saveVp6(_: ActionState, fd: FormData): Promise<ActionState
     const data = {
       customerId: Number(req(fd, "customerId", "Customer")),
       orderId: Number(fd.get("orderId")) || null,
-      packageId: Number(fd.get("packageId")) || null,
-      licenseQty: int(fd, "licenseQty"),
       installDate,
       currentVersion: req(fd, "currentVersion", "Versi ViewPoint 6"),
       apps: str(fd, "apps"),
       specialConfig: str(fd, "specialConfig"),
-      price: num(fd, "price"),
       notes: str(fd, "notes"),
     };
     const before = id ? await prisma.vp6Installation.findUniqueOrThrow({ where: { id }, include: { devices: true, pcs: true } }) : null;
@@ -131,13 +128,10 @@ export async function saveSubscription(_: ActionState, fd: FormData): Promise<Ac
     const data = {
       accountId: Number(req(fd, "accountId", "Akun Tricefy")),
       orderId: Number(fd.get("orderId")) || null,
-      packageId: Number(fd.get("packageId")) || null,
-      quantity: int(fd, "quantity"),
       installDate: date(fd, "installDate"),
       contractDate: date(fd, "contractDate"),
       activationDate,
       endDate: date(fd, "endDate") ?? defaultEndDate(activationDate), // default aktivasi + 3 tahun (FR-06.3)
-      price: num(fd, "price"),
       notes: str(fd, "notes"),
     };
     const before = id ? await prisma.tricefySubscription.findUniqueOrThrow({ where: { id }, include: { devices: true } }) : null;

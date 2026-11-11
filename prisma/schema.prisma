@@ -1,6 +1,7 @@
-// Skema database SWIT Monitoring v2
+// Skema database SWIT Monitoring v3
 // Gabungan: SRS Sales Monitoring (Site, Alat USG, PC, ViewPoint 6, Tricefy, PO, Invoice)
-//         + alur admin (tahapan progres PO, termin/cicilan, lampiran, catatan teknis).
+//         + alur dokumen PO: PO diterima → Invoice & BA → Tukar faktur → Penagihan → Clear.
+// Harga hanya satu: nilai final di invoice. Package disiapkan untuk pengembangan berikutnya.
 // Ubah file ini lalu jalankan `npx prisma migrate dev --name <nama_perubahan>`.
 
 generator client {
@@ -62,7 +63,6 @@ model Package {
   product              Product
   name                 String
   unit                 String? // studies, scanner, lisensi
-  listPrice            Decimal?              @db.Decimal(15, 2)
   active               Boolean               @default(true)
   vp6Installations     Vp6Installation[]
   tricefySubscriptions TricefySubscription[]
@@ -78,17 +78,6 @@ model MachineModel {
   devices Device[]
 
   @@map("machine_models")
-}
-
-model Stage {
-  id        Int       @id @default(autoincrement())
-  name      String
-  sortOrder Int
-  isPayment Boolean   @default(false) // tahap pembayaran: dipecah per invoice/termin
-  active    Boolean   @default(true)
-  poStages  PoStage[]
-
-  @@map("stages")
 }
 
 // ═══════════════════════════ CUSTOMER (= SITE) ═══════════════════════════
@@ -191,17 +180,21 @@ model PurchaseOrder {
   id                   Int                   @id @default(autoincrement())
   customerId           Int
   poNumber             String                @unique
-  poDate               DateTime              @db.Date
+  poDate               DateTime              @db.Date // tanggal PO diterima dari customer
   paymentMethod        PaymentMethod         @default(CASH)
-  amount               Decimal               @db.Decimal(15, 2) // nilai PO (deal)
-  ppnPercent           Decimal?              @db.Decimal(5, 2)
-  specialNotes         String? // diskon, negosiasi, deal khusus
+  // Langkah 2: invoice & berita acara (harga final ada di sini)
+  invoiceNumber        String?               @unique
+  invoiceDate          DateTime?             @db.Date
+  finalAmount          Decimal?              @db.Decimal(15, 2)
+  baDate               DateTime?             @db.Date
+  // Langkah 3: tukar faktur
+  tukarFakturDate      DateTime?             @db.Date
+  notes                String? // diskon, negosiasi, deal khusus
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   deletedAt            DateTime?
   customer             Customer              @relation(fields: [customerId], references: [id])
-  invoices             Invoice[]
-  stages               PoStage[]
+  payments             Payment[]
   attachments          Attachment[]
   vp6Installations     Vp6Installation[]
   tricefySubscriptions TricefySubscription[]
@@ -210,38 +203,23 @@ model PurchaseOrder {
   @@map("purchase_orders")
 }
 
-// Invoice = tagihan/termin. Cash = 1 invoice, cicilan = beberapa invoice (BR-06)
-model Invoice {
-  id            Int           @id @default(autoincrement())
-  orderId       Int
-  sequence      Int // termin ke-
-  invoiceNumber String?       @unique // diisi saat invoice terbit
-  invoiceDate   DateTime?     @db.Date
-  amount        Decimal       @db.Decimal(15, 2)
-  dueDate       DateTime      @db.Date
-  paidAt        DateTime?     @db.Date
-  notes         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  order         PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  attachments   Attachment[]
+// Penagihan per termin. Cash = 1 termin, cicilan = beberapa termin dari satu invoice.
+model Payment {
+  id          Int           @id @default(autoincrement())
+  orderId     Int
+  sequence    Int // termin ke-
+  amount      Decimal       @db.Decimal(15, 2)
+  dueDate     DateTime      @db.Date
+  paidAt      DateTime?     @db.Date
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
 
   @@unique([orderId, sequence])
   @@index([dueDate])
-  @@map("invoices")
-}
-
-model PoStage {
-  id          Int           @id @default(autoincrement())
-  orderId     Int
-  stageId     Int
-  completedAt DateTime?     @db.Date
-  note        String?
-  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  stage       Stage         @relation(fields: [stageId], references: [id])
-
-  @@unique([orderId, stageId])
-  @@map("po_stages")
+  @@map("payments")
 }
 
 // ═══════════════════════════ VIEWPOINT 6 ═══════════════════════════
@@ -256,7 +234,6 @@ model Vp6Installation {
   currentVersion String
   apps           String? // teks dulu, nanti bisa jadi pilihan ganda (FR-05.6)
   specialConfig  String? // hanya bila ada permintaan khusus user/dokter (BR-07)
-  price          Decimal?                @db.Decimal(15, 2)
   notes          String?
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
@@ -336,7 +313,6 @@ model TricefySubscription {
   contractDate   DateTime?                   @db.Date
   activationDate DateTime                    @db.Date
   endDate        DateTime                    @db.Date // default aktivasi + 3 tahun (BR-04)
-  price          Decimal?                    @db.Decimal(15, 2)
   notes          String?
   createdAt      DateTime                    @default(now())
   updatedAt      DateTime                    @updatedAt
@@ -403,9 +379,10 @@ model ErrorLog {
 
 enum AttachmentKind {
   PO
-  BERITA_ACARA
-  FAKTUR
   INVOICE
+  BERITA_ACARA
+  TANDA_TERIMA // tanda terima tukar faktur
+  FAKTUR // faktur pajak (opsional)
   BUKTI_BAYAR
   ERROR
   LAINNYA
@@ -414,7 +391,7 @@ enum AttachmentKind {
 model Attachment {
   id           Int            @id @default(autoincrement())
   orderId      Int?
-  invoiceId    Int?
+  paymentId    Int?
   errorLogId   Int?
   kind         AttachmentKind @default(LAINNYA)
   fileName     String
@@ -424,7 +401,7 @@ model Attachment {
   uploadedById Int?
   createdAt    DateTime       @default(now())
   order        PurchaseOrder? @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  invoice      Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  payment      Payment?       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   errorLog     ErrorLog?      @relation(fields: [errorLogId], references: [id], onDelete: Cascade)
   uploadedBy   User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
 

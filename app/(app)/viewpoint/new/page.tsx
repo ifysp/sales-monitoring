@@ -8,7 +8,7 @@ export default async function NewVp6Page({ searchParams }: PageProps<"/viewpoint
   const sp = await searchParams;
   const orderId = Number(sp.orderId) || undefined;
   if (!sp.customerId) return <CustomerPicker title="Instalasi ViewPoint 6 baru" action="/viewpoint/new" />;
-  const opts = await customerFormOptions(Number(sp.customerId), "VIEWPOINT");
+  const opts = await customerFormOptions(Number(sp.customerId));
   if (!opts.customer) notFound();
   const here = `/viewpoint/new?customerId=${opts.customer.id}${orderId ? `&orderId=${orderId}` : ""}`;
   return (

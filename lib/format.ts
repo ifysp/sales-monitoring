@@ -64,15 +64,15 @@ export const PC_SOURCE_LABEL: Record<string, string> = {
 };
 export const PC_ROLE_LABEL: Record<string, string> = { SERVER_CLIENT: "Server + Client", SERVER: "Server", CLIENT: "Client" };
 export const ATTACHMENT_LABEL: Record<string, string> = {
-  PO: "PO", BERITA_ACARA: "Berita Acara", FAKTUR: "Faktur", INVOICE: "Invoice",
-  BUKTI_BAYAR: "Bukti Bayar", ERROR: "Error", LAINNYA: "Lainnya",
+  PO: "PO", INVOICE: "Invoice", BERITA_ACARA: "Berita Acara", TANDA_TERIMA: "Tanda terima tukar faktur",
+  FAKTUR: "Faktur pajak", BUKTI_BAYAR: "Bukti bayar", ERROR: "Error", LAINNYA: "Lainnya",
 };
 export const TECH_NOTE_LABEL: Record<string, string> = {
   INTEGRASI: "Integrasi", PREFERENSI_DOKTER: "Preferensi Dokter", QUICK_REPORT: "Quick Report",
   JURNAL_GRAFIK: "Jurnal & Grafik", LAINNYA: "Lainnya",
 };
 export const ENTITY_LABEL: Record<string, string> = {
-  Customer: "Customer", Device: "Alat USG", Pc: "PC", PurchaseOrder: "PO", Invoice: "Invoice",
+  Customer: "Customer", Device: "Alat USG", Pc: "PC", PurchaseOrder: "PO", Payment: "Termin penagihan", Trash: "Data terhapus",
   Vp6Installation: "Instalasi VP6", TricefyAccount: "Akun Tricefy", TricefySubscription: "Langganan Tricefy",
   TechNote: "Catatan teknis", ErrorLog: "Error log", Attachment: "Lampiran", User: "Pengguna",
   Package: "Package", Stage: "Tahapan", MachineModel: "Model mesin",

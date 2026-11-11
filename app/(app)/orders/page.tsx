@@ -8,10 +8,10 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
   const f = toFilters(await searchParams);
   const [orders, customers] = await Promise.all([listOrders(f), customerOptions()]);
   const qs = new URLSearchParams(f as Record<string, string>).toString();
-  const total = orders.reduce((s, o) => s + o.amountNum, 0);
+  const total = orders.reduce((s, o) => s + (o.amount ?? 0), 0);
   return (
     <>
-      <PageHeader title="Purchase Order" subtitle={`${orders.length} PO · total ${rupiah(total)}`} actions={<LinkButton href="/orders/new">+ PO baru</LinkButton>} />
+      <PageHeader title="Purchase Order" subtitle={`${orders.length} PO · total harga final ${rupiah(total)}`} actions={<LinkButton href="/orders/new">+ PO baru</LinkButton>} />
       <Card>
         <FilterBar exportHref={`/api/export/orders?${qs}`}>
           <FilterField label="Cari"><Input name="q" defaultValue={f.q} placeholder="No. PO / invoice / customer" className="w-56" /></FilterField>
@@ -40,7 +40,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
         </FilterBar>
         {orders.length === 0 ? <Empty>Tidak ada PO.</Empty> : (
           <Table>
-            <thead><tr><th>Tanggal</th><th>Customer / PO</th><th>Isi</th><th>Bayar</th><th className="text-right">Nilai</th><th className="text-right">Lunas</th><th>Progres</th></tr></thead>
+            <thead><tr><th>Tanggal</th><th>Customer / PO</th><th>Produk</th><th>Bayar</th><th>No. invoice</th><th className="text-right">Harga final</th><th className="text-right">Lunas</th><th>Progres</th></tr></thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
@@ -52,7 +52,8 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
                     {o.vp6Installations.length + o.tricefySubscriptions.length === 0 && <span className="text-slate-400">belum diisi</span>}
                   </td>
                   <td>{PAYMENT_LABEL[o.paymentMethod]}</td>
-                  <td className="whitespace-nowrap text-right">{rupiah(o.amountNum)}</td>
+                  <td className="font-mono text-xs">{o.invoiceNumber ?? <span className="font-sans text-slate-400">belum terbit</span>}</td>
+                  <td className="whitespace-nowrap text-right">{o.amount === null ? <span className="text-slate-400">—</span> : rupiah(o.amount)}</td>
                   <td className="whitespace-nowrap text-right">{rupiah(o.paid)}</td>
                   <td className="w-64"><ProgressBar progress={o.progress} /></td>
                 </tr>

@@ -36,10 +36,15 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
     listTricefy({ customer: cid }, today),
   ]);
   const base = `/customers/${customer.id}`;
-  const unpaid = orders.reduce((s, o) => s + (o.amountNum - o.paid), 0);
+  const unpaid = orders.reduce((s, o) => s + (o.amount === null ? 0 : o.amount - o.paid), 0);
   // Ringkasan "perlu perhatian": invoice belum lunas + langganan Tricefy yang tidak aktif
   const attention = [
-    ...orders.flatMap((o) => o.invoices.filter((i) => !i.paidAt).map((i) => ({
+    ...orders.filter((o) => !o.progress.complete && !o.progress.current.startsWith("Termin") && o.progress.current !== "Pembayaran").map((o) => ({
+      key: `o${o.id}`, href: `/orders/${o.id}`,
+      text: `PO ${o.poNumber} · menunggu langkah ${o.progress.current}`,
+      badge: <Badge tone="amber">{o.progress.percent}%</Badge>,
+    })),
+    ...orders.flatMap((o) => o.payments.filter((i) => !i.paidAt).map((i) => ({
       key: `i${i.id}`, href: `/orders/${o.id}`,
       text: `PO ${o.poNumber} · termin ${i.sequence} · ${rupiah(i.amount)} · jatuh tempo ${tanggal(i.dueDate)}`,
       badge: <InvoiceBadge paidAt={i.paidAt} dueDate={i.dueDate} today={today} />,
@@ -99,7 +104,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
               <StatCard label="Tricefy" value={tricefy.length} sub={tricefy.some((t) => t.status !== "AKTIF") ? "Ada yang perlu diperpanjang" : undefined} tone={tricefy.some((t) => t.status !== "AKTIF") ? "red" : undefined} href={`${base}?tab=tricefy`} />
             </div>
             <Card title="Perlu perhatian">
-              {attention.length === 0 ? <p className="text-sm text-slate-500">Tidak ada tagihan terbuka atau langganan yang perlu diperpanjang.</p> : (
+              {attention.length === 0 ? <p className="text-sm text-slate-500">Tidak ada PO yang tertahan, tagihan terbuka, atau langganan yang perlu diperpanjang.</p> : (
                 <ul className="divide-y divide-slate-100 text-sm">
                   {attention.map((a) => (
                     <li key={a.key} className="flex items-center justify-between gap-3 py-2">
@@ -127,13 +132,13 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         <Card title="Purchase Order" actions={<LinkButton small href={`/orders/new?customerId=${cid}`}>+ PO</LinkButton>}>
           {orders.length === 0 ? <Empty>Belum ada PO.</Empty> : (
             <Table>
-              <thead><tr><th>PO</th><th className="text-right">Nilai</th><th className="text-right">Di-invoice</th><th className="text-right">Lunas</th><th>Progres</th></tr></thead>
+              <thead><tr><th>PO</th><th>No. invoice</th><th className="text-right">Harga final</th><th className="text-right">Lunas</th><th>Progres</th></tr></thead>
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
                     <td><Link className="font-medium text-teal-800 hover:underline" href={`/orders/${o.id}`}>{o.poNumber}</Link><div className="text-xs text-slate-500">{tanggal(o.poDate)}</div></td>
-                    <td className="text-right whitespace-nowrap">{rupiah(o.amountNum)}</td>
-                    <td className="text-right whitespace-nowrap">{rupiah(o.invoiced)}</td>
+                    <td className="font-mono text-xs">{o.invoiceNumber ?? "-"}</td>
+                    <td className="text-right whitespace-nowrap">{o.amount === null ? "—" : rupiah(o.amount)}</td>
                     <td className="text-right whitespace-nowrap">{rupiah(o.paid)}</td>
                     <td className="w-64"><ProgressBar progress={o.progress} /></td>
                   </tr>
@@ -148,13 +153,12 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         <Card title="Instalasi ViewPoint 6" actions={<LinkButton small href={`/viewpoint/new?customerId=${cid}`}>+ Instalasi</LinkButton>}>
           {vp6.length === 0 ? <Empty>Belum ada instalasi ViewPoint 6.</Empty> : (
             <Table>
-              <thead><tr><th>Tanggal install</th><th>Versi</th><th>Package</th><th>Topologi</th><th>Alat (SN)</th><th>PO</th></tr></thead>
+              <thead><tr><th>Tanggal install</th><th>Versi</th><th>Topologi</th><th>Alat (SN)</th><th>PO</th></tr></thead>
               <tbody>
                 {vp6.map((v) => (
                   <tr key={v.id}>
                     <td><Link className="font-medium text-teal-800 hover:underline" href={`/viewpoint/${v.id}`}>{tanggal(v.installDate)}</Link></td>
                     <td><Badge tone="teal">{v.currentVersion}</Badge></td>
-                    <td>{v.package?.name ?? "-"}</td>
                     <td>{topology(v.pcs)}</td>
                     <td className="font-mono text-xs">{v.devices.map((d) => d.device.serialNumber).join(", ") || "-"}</td>
                     <td>{v.order ? <Link className="text-teal-800 hover:underline" href={`/orders/${v.order.id}`}>{v.order.poNumber}</Link> : "-"}</td>
@@ -170,15 +174,14 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         <Card title="Akun & langganan Tricefy" actions={<LinkButton small href={`/tricefy/accounts/new?customerId=${cid}`}>+ Akun Tricefy</LinkButton>}>
           {customer.tricefyAccounts.length === 0 ? <Empty>Belum ada akun Tricefy.</Empty> : (
             <Table>
-              <thead><tr><th>ID Tricefy</th><th>Package</th><th>Aktivasi</th><th>Berakhir</th><th>Status</th></tr></thead>
+              <thead><tr><th>ID Tricefy</th><th>Aktivasi</th><th>Berakhir</th><th>Status</th></tr></thead>
               <tbody>
                 {customer.tricefyAccounts.map((a) => {
                   const s = tricefy.find((t) => t.accountId === a.id);
                   return (
                     <tr key={a.id}>
                       <td><Link className="font-medium text-teal-800 hover:underline" href={`/tricefy/accounts/${a.id}`}>{a.tricefyId}</Link><div className="text-xs text-slate-500">{a.accountEmail}</div></td>
-                      <td>{s?.package?.name ?? "-"}</td>
-                      <td>{s ? tanggal(s.activationDate) : "-"}</td>
+                                            <td>{s ? tanggal(s.activationDate) : "-"}</td>
                       <td>{s ? tanggal(s.endDate) : "-"}</td>
                       <td>{s ? <TricefyBadge status={s.status} daysLeft={s.daysLeft} /> : <Badge>Belum ada langganan</Badge>}</td>
                     </tr>

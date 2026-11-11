@@ -16,26 +16,27 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
         <Button variant="outline">Tampilkan</Button>
       </form>
       <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="PO masuk" value={r.orders.length} sub={rupiah(r.totalPo)} />
+        <StatCard label="PO diterima" value={r.orders.length} sub={`${r.invoiced.length} invoice terbit · ${rupiah(r.totalSales)}`} />
         <StatCard label="Pembayaran diterima" value={rupiah(r.totalPaid)} sub={`${r.payments.length} termin`} tone="teal" />
         <StatCard label="Instalasi ViewPoint 6" value={r.vp6.length} />
         <StatCard label="Aktivasi Tricefy" value={r.tricefy.length} />
       </div>
       <div className="space-y-6">
-        <Card title="PO masuk">
-          {r.orders.length === 0 ? <Empty>Tidak ada PO masuk.</Empty> : (
+        <Card title="PO diterima">
+          {r.orders.length === 0 ? <Empty>Tidak ada PO diterima.</Empty> : (
             <Table>
-              <thead><tr><th>Tanggal</th><th>Customer / PO</th><th>Bayar</th><th className="text-right">Nilai</th><th className="text-right">Lunas</th><th>Tahap</th><th>Special notes</th></tr></thead>
+              <thead><tr><th>Tanggal</th><th>Customer / PO</th><th>Bayar</th><th>No. invoice</th><th className="text-right">Harga final</th><th className="text-right">Lunas</th><th>Langkah</th><th>Catatan</th></tr></thead>
               <tbody>
                 {r.orders.map((o) => (
                   <tr key={o.id}>
                     <td className="whitespace-nowrap">{tanggal(o.poDate)}</td>
                     <td><Link className="font-medium text-teal-800 hover:underline" href={`/orders/${o.id}`}>{o.customer.name}</Link><div className="text-xs text-slate-500">PO {o.poNumber}</div></td>
                     <td>{PAYMENT_LABEL[o.paymentMethod]}</td>
-                    <td className="whitespace-nowrap text-right">{rupiah(o.amountNum)}</td>
+                    <td className="font-mono text-xs">{o.invoiceNumber ?? "-"}</td>
+                    <td className="whitespace-nowrap text-right">{o.amount === null ? "—" : rupiah(o.amount)}</td>
                     <td className="whitespace-nowrap text-right">{rupiah(o.paid)}</td>
                     <td><Badge tone={o.progress.complete ? "green" : "teal"}>{o.progress.complete ? "Clear" : o.progress.current} · {o.progress.percent}%</Badge></td>
-                    <td className="max-w-xs text-slate-600">{o.specialNotes ?? "-"}</td>
+                    <td className="max-w-xs text-slate-600">{o.notes ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -52,7 +53,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
                     <td>{tanggal(p.paidAt)}</td>
                     <td><Link className="text-teal-800 hover:underline" href={`/orders/${p.orderId}`}>{p.order.customer.name}</Link><div className="text-xs text-slate-500">PO {p.order.poNumber}</div></td>
                     <td>{p.sequence}</td>
-                    <td className="font-mono text-xs">{p.invoiceNumber ?? "-"}</td>
+                    <td className="font-mono text-xs">{p.order.invoiceNumber ?? "-"}</td>
                     <td className="text-right">{rupiah(p.amount)}</td>
                   </tr>
                 ))}

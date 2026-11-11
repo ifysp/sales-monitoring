@@ -9,7 +9,7 @@ export default async function EditSubscriptionPage({ params }: PageProps<"/trice
   const { id } = await params;
   const sub = await prisma.tricefySubscription.findFirst({ where: { id: Number(id), deletedAt: null }, include: { devices: true, account: { include: { customer: true } } } });
   if (!sub) notFound();
-  const opts = await customerFormOptions(sub.account.customerId, "TRICEFY");
+  const opts = await customerFormOptions(sub.account.customerId);
   return (
     <>
       <PageHeader title="Edit langganan Tricefy" />
@@ -17,7 +17,7 @@ export default async function EditSubscriptionPage({ params }: PageProps<"/trice
         <Card className="xl:col-span-2">
           <SubscriptionForm
             account={{ id: sub.accountId, tricefyId: sub.account.tricefyId, customerId: sub.account.customerId, customerName: sub.account.customer.name }}
-            devices={opts.devices} orders={opts.orders} packages={opts.packages} sub={sub}
+            devices={opts.devices} orders={opts.orders} sub={sub}
             selDevices={sub.devices.map((d) => d.deviceId)} here={`/tricefy/subscriptions/${sub.id}/edit`}
           />
         </Card>

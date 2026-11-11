@@ -37,7 +37,7 @@ export default async function NewSubscriptionPage({ searchParams }: PageProps<"/
 
   const account = await prisma.tricefyAccount.findFirst({ where: { id: accountId, deletedAt: null }, include: { customer: true } });
   if (!account) notFound();
-  const opts = await customerFormOptions(account.customerId, "TRICEFY");
+  const opts = await customerFormOptions(account.customerId);
   const renewFrom = Number(sp.renewFrom) ? await prisma.tricefySubscription.findUnique({ where: { id: Number(sp.renewFrom) }, include: { devices: true } }) : null;
   const here = `/tricefy/subscriptions/new?accountId=${account.id}${orderId ? `&orderId=${orderId}` : ""}`;
   return (
@@ -46,8 +46,8 @@ export default async function NewSubscriptionPage({ searchParams }: PageProps<"/
       <Card>
         <SubscriptionForm
           account={{ id: account.id, tricefyId: account.tricefyId, customerId: account.customerId, customerName: account.customer.name }}
-          devices={opts.devices} orders={opts.orders} packages={opts.packages} orderId={orderId} here={here}
-          prefill={{ activationDate: dateVal(typeof sp.activation === "string" ? sp.activation : null) ?? undefined, packageId: renewFrom?.packageId, quantity: renewFrom?.quantity }}
+          devices={opts.devices} orders={opts.orders} orderId={orderId} here={here}
+          prefill={{ activationDate: dateVal(typeof sp.activation === "string" ? sp.activation : null) ?? undefined }}
           selDevices={renewFrom?.devices.map((d) => d.deviceId) ?? (opts.devices.length === 1 ? [opts.devices[0].id] : [])}
         />
       </Card>

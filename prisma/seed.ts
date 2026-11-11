@@ -1,4 +1,4 @@
-// Data awal: 2 akun Admin, package sementara, tahapan, model alat.
+// Data awal: 2 akun Admin dan model alat USG.
 // Jalankan: npx prisma db seed   (aman dijalankan ulang)
 import "dotenv/config";
 import bcrypt from "bcryptjs";
@@ -21,38 +21,7 @@ async function main() {
     });
   }
 
-  // ── Package sementara (ubah di Pengaturan → Master data) ──
-  if ((await prisma.package.count()) === 0) {
-    await prisma.package.createMany({
-      data: [
-        { product: "TRICEFY", name: "Scanner license", unit: "scanner" },
-        { product: "TRICEFY", name: "Basic license", unit: "lisensi" },
-        { product: "TRICEFY", name: "Studies 1000", unit: "studies" },
-        { product: "TRICEFY", name: "Unlimited" },
-        { product: "TRICEFY", name: "Custom" },
-        { product: "VIEWPOINT", name: "Obgyn Basic", unit: "lisensi" },
-        { product: "VIEWPOINT", name: "Obgyn Analytic", unit: "lisensi" },
-        { product: "VIEWPOINT", name: "Radiologi Basic", unit: "lisensi" },
-        { product: "VIEWPOINT", name: "Radiologi Analytic", unit: "lisensi" },
-        { product: "VIEWPOINT", name: "Cardio", unit: "lisensi" },
-        { product: "VIEWPOINT", name: "Custom", unit: "lisensi" },
-      ],
-    });
-  }
 
-  // ── Tahapan progres PO (tahap "Payment" dipecah otomatis per invoice/termin) ──
-  if ((await prisma.stage.count()) === 0) {
-    await prisma.stage.createMany({
-      data: [
-        { name: "PO masuk", sortOrder: 1 },
-        { name: "Berita acara", sortOrder: 2 },
-        { name: "Aktivasi", sortOrder: 3 },
-        { name: "Tukar faktur", sortOrder: 4 },
-        { name: "Payment", sortOrder: 5, isPayment: true },
-        { name: "Clear", sortOrder: 6 },
-      ],
-    });
-  }
 
   // ── Model alat USG ──
   if ((await prisma.machineModel.count()) === 0) {

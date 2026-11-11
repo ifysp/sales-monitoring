@@ -4,7 +4,7 @@ import { rupiah, tanggal } from "@/lib/format";
 import { Card, Empty, PageHeader, Table, TricefyBadge, InvoiceBadge } from "@/components/ui";
 
 export default async function NotificationsPage() {
-  const { tricefy, invoices, today } = await getAlerts();
+  const { tricefy, payments: invoices, today } = await getAlerts();
   const groups = [
     { title: "Kedaluwarsa", items: tricefy.filter((s) => s.status === "KEDALUWARSA") },
     { title: "Habis ≤ 30 hari", items: tricefy.filter((s) => s.status === "AKAN_HABIS" && s.daysLeft <= 30) },
@@ -33,8 +33,8 @@ export default async function NotificationsPage() {
             </div>
           ))}
         </Card>
-        <Card title={`Invoice (${invoices.length})`}>
-          {invoices.length === 0 ? <Empty>Tidak ada tagihan yang jatuh tempo dalam 7 hari.</Empty> : (
+        <Card title={`Penagihan (${invoices.length})`}>
+          {invoices.length === 0 ? <Empty>Tidak ada termin yang jatuh tempo dalam 7 hari.</Empty> : (
             <Table>
               <thead><tr><th>Customer / PO</th><th>Jatuh tempo</th><th className="text-right">Nominal</th></tr></thead>
               <tbody>

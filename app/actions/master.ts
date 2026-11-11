@@ -4,28 +4,13 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireEditor } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { handle, req, str, num, int, FormError } from "@/lib/forms";
+import { handle, req, str, FormError } from "@/lib/forms";
 import type { ActionState } from "@/components/client";
-import type { Product } from "@/generated/prisma/client";
 
 const done = (msg: string) => {
   revalidatePath("/settings", "layout");
   return { ok: msg };
 };
-
-export async function savePackage(_: ActionState, fd: FormData): Promise<ActionState> {
-  return handle(async () => {
-    const me = await requireEditor();
-    const id = Number(fd.get("id")) || null;
-    const product = req(fd, "product", "Produk");
-    if (product !== "VIEWPOINT" && product !== "TRICEFY") throw new FormError("Produk tidak valid.");
-    const data = { product: product as Product, name: req(fd, "name", "Nama package"), unit: str(fd, "unit"), listPrice: num(fd, "listPrice"), active: fd.get("active") === "on" };
-    const before = id ? await prisma.package.findUnique({ where: { id } }) : null;
-    const p = id ? await prisma.package.update({ where: { id }, data }) : await prisma.package.create({ data });
-    await audit({ userId: me.id, action: id ? "UPDATE" : "CREATE", entity: "Package", entityId: p.id, summary: p.name, before, after: p });
-    return done(`Package "${p.name}" disimpan.`);
-  });
-}
 
 export async function saveMachineModel(_: ActionState, fd: FormData): Promise<ActionState> {
   return handle(async () => {
@@ -35,21 +20,6 @@ export async function saveMachineModel(_: ActionState, fd: FormData): Promise<Ac
     const m = id ? await prisma.machineModel.update({ where: { id }, data }) : await prisma.machineModel.create({ data });
     await audit({ userId: me.id, action: id ? "UPDATE" : "CREATE", entity: "MachineModel", entityId: m.id, summary: `${m.brand} ${m.model}` });
     return done(`Model ${m.model} disimpan.`);
-  });
-}
-
-export async function saveStage(_: ActionState, fd: FormData): Promise<ActionState> {
-  return handle(async () => {
-    const me = await requireEditor();
-    const id = Number(fd.get("id")) || null;
-    const sortOrder = int(fd, "sortOrder");
-    if (sortOrder === null) throw new FormError("Urutan wajib diisi.");
-    const isPayment = fd.get("isPayment") === "on";
-    const data = { name: req(fd, "name", "Nama tahap"), sortOrder, isPayment, active: fd.get("active") === "on" };
-    if (isPayment) await prisma.stage.updateMany({ where: { isPayment: true, NOT: id ? { id } : undefined }, data: { isPayment: false } });
-    const s = id ? await prisma.stage.update({ where: { id }, data }) : await prisma.stage.create({ data });
-    await audit({ userId: me.id, action: id ? "UPDATE" : "CREATE", entity: "Stage", entityId: s.id, summary: s.name });
-    return done(`Tahap "${s.name}" disimpan.`);
   });
 }
 

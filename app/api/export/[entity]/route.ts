@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { getCurrentUser } from "@/lib/auth";
-import { listCustomers, listDevices, listInvoices, listOrders, listPcs, listTricefy, listVp6, topology, type Filters } from "@/lib/queries";
+import { listCustomers, listDevices, listOrders, listPayments, listPcs, listTricefy, listVp6, topology, type Filters } from "@/lib/queries";
 import { monthlyReport, isMonth, monthRange } from "@/lib/report";
 import { CUSTOMER_TYPE_LABEL, MONTHS_LONG, PAYMENT_LABEL, PC_ROLE_LABEL, PC_SOURCE_LABEL, todayDate } from "@/lib/format";
 import { TRICEFY_STATUS_LABEL } from "@/lib/tricefy";
@@ -30,23 +30,23 @@ async function build(entity: string, f: Filters): Promise<{ file: string; sheets
     }
     case "viewpoint": {
       const rows = await listVp6(f);
-      return { file: "instalasi-viewpoint6", sheets: [{ name: "ViewPoint 6", cols: [{ header: "Tanggal install", date: true }, { header: "Customer", width: 30 }, { header: "Site ID", width: 14 }, { header: "Versi" }, { header: "Package", width: 18 }, { header: "Lisensi" }, { header: "Topologi", width: 20 }, { header: "Alat (SN)", width: 30 }, { header: "No. PO", width: 16 }, { header: "Harga", money: true }, { header: "Apps", width: 30 }, { header: "Special config", width: 30 }],
-        rows: rows.map((v) => [v.installDate, v.customer.name, v.customer.geSiteId, v.currentVersion, v.package?.name, v.licenseQty, topology(v.pcs), v.devices.map((d) => d.device.serialNumber).join(", "), v.order?.poNumber, num(v.price), v.apps, v.specialConfig]) }] };
+      return { file: "instalasi-viewpoint6", sheets: [{ name: "ViewPoint 6", cols: [{ header: "Tanggal install", date: true }, { header: "Customer", width: 30 }, { header: "Site ID", width: 14 }, { header: "Versi" }, { header: "Topologi", width: 20 }, { header: "Alat (SN)", width: 30 }, { header: "No. PO", width: 16 }, { header: "Apps", width: 30 }, { header: "Special config", width: 30 }],
+        rows: rows.map((v) => [v.installDate, v.customer.name, v.customer.geSiteId, v.currentVersion, topology(v.pcs), v.devices.map((d) => d.device.serialNumber).join(", "), v.order?.poNumber, v.apps, v.specialConfig]) }] };
     }
     case "tricefy": {
       const rows = await listTricefy(f, today);
-      return { file: "tricefy", sheets: [{ name: "Tricefy", cols: [{ header: "Customer", width: 30 }, { header: "ID Tricefy", width: 16 }, { header: "Package", width: 18 }, { header: "Jumlah" }, { header: "Alat (SN)", width: 30 }, { header: "Install", date: true }, { header: "Kontrak", date: true }, { header: "Aktivasi", date: true }, { header: "Berakhir", date: true }, { header: "Sisa hari" }, { header: "Status", width: 14 }, { header: "No. PO", width: 16 }, { header: "Harga", money: true }],
-        rows: rows.map((s) => [s.account.customer.name, s.account.tricefyId, s.package?.name, s.quantity, s.devices.map((d) => d.device.serialNumber).join(", "), s.installDate, s.contractDate, s.activationDate, s.endDate, s.daysLeft, TRICEFY_STATUS_LABEL[s.status], s.order?.poNumber, num(s.price)]) }] };
+      return { file: "tricefy", sheets: [{ name: "Tricefy", cols: [{ header: "Customer", width: 30 }, { header: "ID Tricefy", width: 16 }, { header: "Alat (SN)", width: 30 }, { header: "Install", date: true }, { header: "Kontrak", date: true }, { header: "Aktivasi", date: true }, { header: "Berakhir", date: true }, { header: "Sisa hari" }, { header: "Status", width: 14 }, { header: "No. PO", width: 16 }],
+        rows: rows.map((s) => [s.account.customer.name, s.account.tricefyId, s.devices.map((d) => d.device.serialNumber).join(", "), s.installDate, s.contractDate, s.activationDate, s.endDate, s.daysLeft, TRICEFY_STATUS_LABEL[s.status], s.order?.poNumber]) }] };
     }
     case "orders": {
       const rows = await listOrders(f);
-      return { file: "purchase-order", sheets: [{ name: "PO", cols: [{ header: "Tanggal PO", date: true }, { header: "No. PO", width: 18 }, { header: "Customer", width: 30 }, { header: "Bayar" }, { header: "Nilai PO", money: true }, { header: "PPN %" }, { header: "Di-invoice", money: true }, { header: "Lunas", money: true }, { header: "Sisa tagihan", money: true }, { header: "Tahap", width: 18 }, { header: "Progres %" }, { header: "Special notes", width: 36 }],
-        rows: rows.map((o) => [o.poDate, o.poNumber, o.customer.name, PAYMENT_LABEL[o.paymentMethod], o.amountNum, num(o.ppnPercent), o.invoiced, o.paid, o.amountNum - o.paid, o.progress.complete ? "Clear" : o.progress.current, o.progress.percent, o.specialNotes]) }] };
+      return { file: "purchase-order", sheets: [{ name: "PO", cols: [{ header: "Tgl PO diterima", date: true }, { header: "No. PO", width: 18 }, { header: "Customer", width: 30 }, { header: "Bayar" }, { header: "No. invoice", width: 18 }, { header: "Tgl invoice", date: true }, { header: "Harga final", money: true }, { header: "Tgl BA", date: true }, { header: "Tgl tukar faktur", date: true }, { header: "Lunas", money: true }, { header: "Sisa tagihan", money: true }, { header: "Langkah", width: 18 }, { header: "Progres %" }, { header: "Catatan", width: 36 }],
+        rows: rows.map((o) => [o.poDate, o.poNumber, o.customer.name, PAYMENT_LABEL[o.paymentMethod], o.invoiceNumber, o.invoiceDate, o.amount, o.baDate, o.tukarFakturDate, o.paid, o.remaining, o.progress.complete ? "Clear" : o.progress.current, o.progress.percent, o.notes]) }] };
     }
-    case "invoices": {
-      const rows = await listInvoices(f, today);
-      return { file: "invoice", sheets: [{ name: "Invoice", cols: [{ header: "Jatuh tempo", date: true }, { header: "Customer", width: 30 }, { header: "No. PO", width: 18 }, { header: "Termin" }, { header: "No. invoice", width: 18 }, { header: "Tgl invoice", date: true }, { header: "Nominal", money: true }, { header: "Tgl lunas", date: true }, { header: "Status", width: 14 }],
-        rows: rows.map((i) => [i.dueDate, i.order.customer.name, i.order.poNumber, i.sequence, i.invoiceNumber, i.invoiceDate, num(i.amount), i.paidAt, i.paidAt ? "Lunas" : i.dueDate < today ? "Terlambat" : "Belum dibayar"]) }] };
+    case "payments": {
+      const rows = await listPayments(f, today);
+      return { file: "penagihan", sheets: [{ name: "Penagihan", cols: [{ header: "Jatuh tempo", date: true }, { header: "Customer", width: 30 }, { header: "No. PO", width: 18 }, { header: "No. invoice", width: 18 }, { header: "Termin" }, { header: "Nominal", money: true }, { header: "Tgl lunas", date: true }, { header: "Status", width: 14 }],
+        rows: rows.map((p) => [p.dueDate, p.order.customer.name, p.order.poNumber, p.order.invoiceNumber, p.sequence, num(p.amount), p.paidAt, p.paidAt ? "Lunas" : p.dueDate < today ? "Terlambat" : "Belum dibayar"]) }] };
     }
     case "report": {
       if (!isMonth(f.month)) return null;
@@ -54,12 +54,14 @@ async function build(entity: string, f: Filters): Promise<{ file: string; sheets
       const r = await monthlyReport(f.month);
       const period = `${MONTHS_LONG[m - 1]} ${y}`;
       return { file: `laporan-${f.month}`, sheets: [
-        { name: "PO masuk", title: `PO masuk — ${period}`, cols: [{ header: "Tanggal PO", date: true }, { header: "Customer", width: 30 }, { header: "No. PO", width: 18 }, { header: "Bayar" }, { header: "Nilai PO", money: true }, { header: "Lunas", money: true }, { header: "Tahap", width: 18 }, { header: "Special notes", width: 36 }],
-          rows: r.orders.map((o) => [o.poDate, o.customer.name, o.poNumber, PAYMENT_LABEL[o.paymentMethod], o.amountNum, o.paid, o.progress.complete ? "Clear" : o.progress.current, o.specialNotes]) },
-        { name: "Pembayaran", title: `Pembayaran diterima — ${period}`, cols: [{ header: "Tanggal", date: true }, { header: "Customer", width: 30 }, { header: "No. PO", width: 18 }, { header: "Termin" }, { header: "No. invoice", width: 18 }, { header: "Nominal", money: true }],
-          rows: r.payments.map((p) => [p.paidAt, p.order.customer.name, p.order.poNumber, p.sequence, p.invoiceNumber, num(p.amount)]) },
+        { name: "PO diterima", title: `PO diterima — ${period}`, cols: [{ header: "Tgl PO", date: true }, { header: "Customer", width: 30 }, { header: "No. PO", width: 18 }, { header: "Bayar" }, { header: "No. invoice", width: 18 }, { header: "Harga final", money: true }, { header: "Lunas", money: true }, { header: "Langkah", width: 18 }, { header: "Catatan", width: 36 }],
+          rows: r.orders.map((o) => [o.poDate, o.customer.name, o.poNumber, PAYMENT_LABEL[o.paymentMethod], o.invoiceNumber, o.amount, o.paid, o.progress.complete ? "Clear" : o.progress.current, o.notes]) },
+        { name: "Invoice terbit", title: `Penjualan (invoice terbit) — ${period}`, cols: [{ header: "Tgl invoice", date: true }, { header: "Customer", width: 30 }, { header: "No. PO", width: 18 }, { header: "No. invoice", width: 18 }, { header: "Harga final", money: true }],
+          rows: r.invoiced.map((o) => [o.invoiceDate, o.customer.name, o.poNumber, o.invoiceNumber, num(o.finalAmount)]) },
+        { name: "Pembayaran", title: `Pembayaran diterima — ${period}`, cols: [{ header: "Tanggal", date: true }, { header: "Customer", width: 30 }, { header: "No. PO", width: 18 }, { header: "No. invoice", width: 18 }, { header: "Termin" }, { header: "Nominal", money: true }],
+          rows: r.payments.map((p) => [p.paidAt, p.order.customer.name, p.order.poNumber, p.order.invoiceNumber, p.sequence, num(p.amount)]) },
         { name: "Instalasi & aktivasi", title: `Instalasi VP6 & aktivasi Tricefy — ${period}`, cols: [{ header: "Tanggal", date: true }, { header: "Produk", width: 14 }, { header: "Customer", width: 30 }, { header: "Detail", width: 30 }],
-          rows: [...r.vp6.map((v) => [v.installDate, "ViewPoint 6", v.customer.name, `${v.currentVersion}${v.package ? ` · ${v.package.name}` : ""}`]), ...r.tricefy.map((t) => [t.activationDate, "Tricefy", t.account.customer.name, `${t.account.tricefyId}${t.package ? ` · ${t.package.name}` : ""}`])] },
+          rows: [...r.vp6.map((v) => [v.installDate, "ViewPoint 6", v.customer.name, v.currentVersion]), ...r.tricefy.map((t) => [t.activationDate, "Tricefy", t.account.customer.name, t.account.tricefyId])] },
       ] };
     }
   }

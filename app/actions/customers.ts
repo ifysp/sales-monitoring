@@ -49,7 +49,7 @@ export async function deleteCustomer(id: number): Promise<ActionState> {
     // Site ID dilepas (diberi akhiran) agar bisa dipakai lagi bila penghapusan karena salah input
     const c = await prisma.customer.update({ where: { id }, data: { deletedAt: now, geSiteId: freeKey(before.geSiteId, id) } });
     const orders = await prisma.purchaseOrder.findMany({ where: { customerId: id, deletedAt: null } });
-    for (const o of orders) await prisma.purchaseOrder.update({ where: { id: o.id }, data: { deletedAt: now, poNumber: freeKey(o.poNumber, o.id)! } });
+    for (const o of orders) await prisma.purchaseOrder.update({ where: { id: o.id }, data: { deletedAt: now, poNumber: freeKey(o.poNumber, o.id)!, invoiceNumber: freeKey(o.invoiceNumber, o.id) } });
     await audit({ userId: me.id, action: "DELETE", entity: "Customer", entityId: id, summary: c.name, before });
     revalidatePath("/customers");
     redirect("/customers");

@@ -1,19 +1,20 @@
 import Link from "next/link";
-import { customerOptions, listInvoices, toFilters } from "@/lib/queries";
+import { customerOptions, listPayments, toFilters } from "@/lib/queries";
 import { rupiah, tanggal, todayDate } from "@/lib/format";
 import { Card, Empty, FilterBar, FilterField, Input, InvoiceBadge, PageHeader, Select, Table } from "@/components/ui";
 
-export default async function InvoicesPage({ searchParams }: PageProps<"/invoices">) {
+// Semua termin penagihan lintas PO (dibuat & dilunasi dari halaman PO)
+export default async function PaymentsPage({ searchParams }: PageProps<"/invoices">) {
   const f = toFilters(await searchParams);
   const today = todayDate();
-  const [invoices, customers] = await Promise.all([listInvoices(f, today), customerOptions()]);
+  const [rows, customers] = await Promise.all([listPayments(f, today), customerOptions()]);
   const qs = new URLSearchParams(f as Record<string, string>).toString();
-  const total = invoices.reduce((s, i) => s + Number(i.amount), 0);
+  const total = rows.reduce((s, p) => s + Number(p.amount), 0);
   return (
     <>
-      <PageHeader title="Invoice & termin" subtitle={`${invoices.length} invoice · ${rupiah(total)} · invoice dibuat & dibayar dari halaman PO`} />
+      <PageHeader title="Penagihan" subtitle={`${rows.length} termin · ${rupiah(total)} · dibuat & dilunasi dari halaman PO`} />
       <Card>
-        <FilterBar exportHref={`/api/export/invoices?${qs}`}>
+        <FilterBar exportHref={`/api/export/payments?${qs}`}>
           <FilterField label="Cari"><Input name="q" defaultValue={f.q} placeholder="No. invoice / PO / customer" className="w-56" /></FilterField>
           <FilterField label="Customer">
             <Select name="customer" defaultValue={f.customer ?? ""} className="w-52">
@@ -32,19 +33,19 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
           <FilterField label="Jatuh tempo dari"><Input type="date" name="from" defaultValue={f.from} className="w-40" /></FilterField>
           <FilterField label="sampai"><Input type="date" name="to" defaultValue={f.to} className="w-40" /></FilterField>
         </FilterBar>
-        {invoices.length === 0 ? <Empty>Tidak ada invoice.</Empty> : (
+        {rows.length === 0 ? <Empty>Belum ada penagihan.</Empty> : (
           <Table>
-            <thead><tr><th>Jatuh tempo</th><th>Customer / PO</th><th>Termin</th><th>No. invoice</th><th className="text-right">Nominal</th><th>Status</th><th>Lunas</th></tr></thead>
+            <thead><tr><th>Jatuh tempo</th><th>Customer / PO</th><th>No. invoice</th><th>Termin</th><th className="text-right">Nominal</th><th>Status</th><th>Lunas</th></tr></thead>
             <tbody>
-              {invoices.map((i) => (
-                <tr key={i.id}>
-                  <td className="whitespace-nowrap">{tanggal(i.dueDate)}</td>
-                  <td><Link className="font-medium text-teal-800 hover:underline" href={`/orders/${i.orderId}`}>{i.order.customer.name}</Link><div className="text-xs text-slate-500">PO {i.order.poNumber}</div></td>
-                  <td>{i.sequence}</td>
-                  <td className="font-mono text-xs">{i.invoiceNumber ?? <span className="text-slate-400">belum terbit</span>}</td>
-                  <td className="whitespace-nowrap text-right">{rupiah(i.amount)}</td>
-                  <td><InvoiceBadge paidAt={i.paidAt} dueDate={i.dueDate} today={today} /></td>
-                  <td className="whitespace-nowrap">{tanggal(i.paidAt)}</td>
+              {rows.map((p) => (
+                <tr key={p.id}>
+                  <td className="whitespace-nowrap">{tanggal(p.dueDate)}</td>
+                  <td><Link className="font-medium text-teal-800 hover:underline" href={`/orders/${p.orderId}`}>{p.order.customer.name}</Link><div className="text-xs text-slate-500">PO {p.order.poNumber}</div></td>
+                  <td className="font-mono text-xs">{p.order.invoiceNumber ?? "-"}</td>
+                  <td>{p.sequence}</td>
+                  <td className="whitespace-nowrap text-right">{rupiah(p.amount)}</td>
+                  <td><InvoiceBadge paidAt={p.paidAt} dueDate={p.dueDate} today={today} /></td>
+                  <td className="whitespace-nowrap">{tanggal(p.paidAt)}{p.paidAt && p._count.attachments > 0 && <span title="Ada bukti bayar"> 📎</span>}</td>
                 </tr>
               ))}
             </tbody>

@@ -6,6 +6,7 @@ const ITEMS = [
   { href: "/settings/master", label: "Master data" },
   { href: "/settings/users", label: "Pengguna" },
   { href: "/settings/audit", label: "Log perubahan" },
+  { href: "/settings/trash", label: "Data terhapus" },
 ];
 
 export function SettingsNav({ current }: { current: string }) {

@@ -16,7 +16,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
     prisma.device.findMany({ where: { deletedAt: null, OR: [{ serialNumber: ci(q) }, { machineModel: { model: ci(q) } }] }, include: { customer: true, machineModel: true }, take: 20 }),
     prisma.tricefyAccount.findMany({ where: { deletedAt: null, OR: [{ tricefyId: ci(q) }, { accountEmail: ci(q) }] }, include: { customer: true }, take: 20 }),
     prisma.purchaseOrder.findMany({ where: { deletedAt: null, poNumber: ci(q) }, include: { customer: true }, take: 20 }),
-    prisma.invoice.findMany({ where: { invoiceNumber: ci(q), order: { deletedAt: null } }, include: { order: { include: { customer: true } } }, take: 20 }),
+    prisma.purchaseOrder.findMany({ where: { deletedAt: null, invoiceNumber: ci(q) }, include: { customer: true }, take: 20 }),
     prisma.pc.findMany({ where: { deletedAt: null, hostname: ci(q) }, include: { customer: true }, take: 20 }),
   ]);
   const groups: { title: string; items: { href: string; title: string; sub: string }[] }[] = [
@@ -24,7 +24,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
     { title: "Alat USG", items: devices.map((d) => ({ href: `/devices/${d.id}`, title: `SN ${d.serialNumber}`, sub: `${d.machineModel ? `${d.machineModel.brand} ${d.machineModel.model} · ` : ""}${d.customer.name}` })) },
     { title: "Akun Tricefy", items: accounts.map((a) => ({ href: `/tricefy/accounts/${a.id}`, title: `ID ${a.tricefyId}`, sub: a.customer.name })) },
     { title: "Purchase Order", items: orders.map((o) => ({ href: `/orders/${o.id}`, title: `PO ${o.poNumber}`, sub: `${o.customer.name} · ${tanggal(o.poDate)}` })) },
-    { title: "Invoice", items: invoices.map((i) => ({ href: `/orders/${i.orderId}`, title: `Invoice ${i.invoiceNumber}`, sub: `${i.order.customer.name} · PO ${i.order.poNumber}` })) },
+    { title: "Invoice", items: invoices.map((i) => ({ href: `/orders/${i.id}`, title: `Invoice ${i.invoiceNumber}`, sub: `${i.customer.name} · PO ${i.poNumber}` })) },
     { title: "PC", items: pcs.map((p) => ({ href: `/pcs/${p.id}/edit`, title: p.hostname ?? `PC #${p.id}`, sub: p.customer.name })) },
   ];
   const total = groups.reduce((s, g) => s + g.items.length, 0);

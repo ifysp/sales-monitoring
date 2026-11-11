@@ -21,9 +21,9 @@ export default async function DashboardPage() {
     prisma.vp6Installation.count({ where: { deletedAt: null } }),
     prisma.tricefySubscription.count({ where: { deletedAt: null, endDate: { gte: today } } }),
     listOrders({ status: "open" }),
-    prisma.purchaseOrder.aggregate({ where: { deletedAt: null, poDate: { gte: yearStart } }, _sum: { amount: true } }),
-    prisma.purchaseOrder.aggregate({ where: { deletedAt: null, poDate: { gte: monthStart } }, _sum: { amount: true }, _count: true }),
-    prisma.invoice.aggregate({ where: { paidAt: { gte: monthStart }, order: { deletedAt: null } }, _sum: { amount: true } }),
+    prisma.purchaseOrder.aggregate({ where: { deletedAt: null, invoiceDate: { gte: yearStart } }, _sum: { finalAmount: true } }),
+    prisma.purchaseOrder.aggregate({ where: { deletedAt: null, invoiceDate: { gte: monthStart } }, _sum: { finalAmount: true }, _count: true }),
+    prisma.payment.aggregate({ where: { paidAt: { gte: monthStart }, order: { deletedAt: null } }, _sum: { amount: true } }),
     prisma.vp6Installation.findMany({ where: { deletedAt: null, installDate: { gte: chartStart } }, select: { installDate: true } }),
     prisma.tricefySubscription.findMany({ where: { deletedAt: null, activationDate: { gte: chartStart } }, select: { activationDate: true } }),
     prisma.auditLog.findMany({ where: { action: { not: "LOGIN" } }, include: { user: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 8 }),
@@ -36,7 +36,7 @@ export default async function DashboardPage() {
   });
   const byStage = new Map<string, number>();
   for (const o of orders) {
-    const k = o.progress.current.startsWith("Termin") ? "Payment (termin)" : o.progress.current;
+    const k = o.progress.current.startsWith("Termin") || o.progress.current === "Pembayaran" ? "Penagihan" : o.progress.current;
     byStage.set(k, (byStage.get(k) ?? 0) + 1);
   }
 
@@ -52,9 +52,9 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Nilai PO bulan ini" value={rupiah(Number(poMonth._sum.amount ?? 0))} sub={`${poMonth._count} PO`} tone="teal" href="/reports" />
+        <StatCard label="Penjualan bulan ini (invoice)" value={rupiah(Number(poMonth._sum.finalAmount ?? 0))} sub={`${poMonth._count} invoice terbit`} tone="teal" href="/reports" />
         <StatCard label="Pembayaran diterima bulan ini" value={rupiah(Number(paidMonth._sum.amount ?? 0))} href="/invoices?status=paid" />
-        <StatCard label={`Nilai PO tahun ${today.getUTCFullYear()}`} value={rupiah(Number(poYear._sum.amount ?? 0))} href="/reports" />
+        <StatCard label={`Penjualan tahun ${today.getUTCFullYear()}`} value={rupiah(Number(poYear._sum.finalAmount ?? 0))} href="/reports" />
       </div>
 
       <div className="mb-6 grid gap-6 xl:grid-cols-2">
@@ -67,7 +67,7 @@ export default async function DashboardPage() {
                   <tr key={s.id}>
                     <td>
                       <Link className="font-medium text-teal-800 hover:underline" href={`/tricefy/accounts/${s.accountId}`}>{s.account.customer.name}</Link>
-                      <div className="text-xs text-slate-500">ID {s.account.tricefyId}{s.package ? ` · ${s.package.name}` : ""}</div>
+                      <div className="text-xs text-slate-500">ID {s.account.tricefyId}</div>
                     </td>
                     <td className="whitespace-nowrap">{tanggal(s.endDate)}</td>
                     <td><TricefyBadge status={s.status} daysLeft={s.daysLeft} /></td>
@@ -77,12 +77,12 @@ export default async function DashboardPage() {
             </Table>
           )}
         </Card>
-        <Card title="Invoice jatuh tempo ≤ 7 hari / terlambat" actions={<LinkButton small variant="outline" href="/invoices?status=unpaid">Semua</LinkButton>}>
-          {alerts.invoices.length === 0 ? <Empty>Tidak ada tagihan mendesak.</Empty> : (
+        <Card title="Penagihan jatuh tempo ≤ 7 hari / terlambat" actions={<LinkButton small variant="outline" href="/invoices?status=unpaid">Semua</LinkButton>}>
+          {alerts.payments.length === 0 ? <Empty>Tidak ada tagihan mendesak.</Empty> : (
             <Table>
               <thead><tr><th>Customer / PO</th><th>Jatuh tempo</th><th className="text-right">Nominal</th></tr></thead>
               <tbody>
-                {alerts.invoices.slice(0, 6).map((i) => (
+                {alerts.payments.slice(0, 6).map((i) => (
                   <tr key={i.id}>
                     <td>
                       <Link className="font-medium text-teal-800 hover:underline" href={`/orders/${i.orderId}`}>{i.order.customer.name}</Link>

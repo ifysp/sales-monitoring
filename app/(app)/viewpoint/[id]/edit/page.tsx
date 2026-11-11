@@ -8,7 +8,7 @@ export default async function EditVp6Page({ params }: PageProps<"/viewpoint/[id]
   const { id } = await params;
   const inst = await prisma.vp6Installation.findFirst({ where: { id: Number(id), deletedAt: null }, include: { devices: true, pcs: true } });
   if (!inst) notFound();
-  const opts = await customerFormOptions(inst.customerId, "VIEWPOINT");
+  const opts = await customerFormOptions(inst.customerId);
   return (
     <>
       <PageHeader title="Edit instalasi ViewPoint 6" />

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { topology } from "@/lib/queries";
 import { deleteVp6, upgradeVp6 } from "@/app/actions/products";
-import { PC_ROLE_LABEL, PC_SOURCE_LABEL, rupiah, tanggal, toInputDate, todayDate } from "@/lib/format";
+import { PC_ROLE_LABEL, PC_SOURCE_LABEL, tanggal, toInputDate, todayDate } from "@/lib/format";
 import { ActionForm, ConfirmDelete, SubmitButton } from "@/components/client";
 import { Badge, Card, DL, Empty, Field, Input, LinkButton, PageHeader, Table } from "@/components/ui";
 import { History } from "@/components/history";
@@ -13,7 +13,7 @@ export default async function Vp6DetailPage({ params }: PageProps<"/viewpoint/[i
   const v = await prisma.vp6Installation.findFirst({
     where: { id: Number(id), deletedAt: null },
     include: {
-      customer: true, package: true, order: true,
+      customer: true, order: true,
       devices: { include: { device: { include: { machineModel: true } } } },
       pcs: { include: { pc: true } },
       versionHistory: { orderBy: [{ changedDate: "desc" }, { id: "desc" }] },
@@ -32,10 +32,7 @@ export default async function Vp6DetailPage({ params }: PageProps<"/viewpoint/[i
           <DL items={[
             ["Site ID", v.customer.geSiteId],
             ["Topologi", topology(v.pcs)],
-            ["Package", v.package?.name],
-            ["Jumlah lisensi", v.licenseQty ? String(v.licenseQty) : null],
             ["Purchase Order", v.order ? <Link key="po" className="text-teal-800 hover:underline" href={`/orders/${v.order.id}`}>{v.order.poNumber}</Link> : null],
-            ["Harga", v.price ? rupiah(v.price) : null],
             ["Apps", v.apps],
             ["Special configuration", v.specialConfig],
             ["Catatan", v.notes],

@@ -15,7 +15,7 @@ const NAV = [
     items: [
       { href: "/customers", label: "Customer / Site", icon: Building2 },
       { href: "/orders", label: "Purchase Order", icon: FileText },
-      { href: "/invoices", label: "Invoice & Termin", icon: Receipt },
+      { href: "/invoices", label: "Penagihan", icon: Receipt },
     ],
   },
   {

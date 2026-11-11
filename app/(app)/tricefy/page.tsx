@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { customerOptions, listTricefy, packageOptions, toFilters } from "@/lib/queries";
+import { customerOptions, listTricefy, toFilters } from "@/lib/queries";
 import { tanggal, todayDate } from "@/lib/format";
 import { Card, Empty, FilterBar, FilterField, Input, LinkButton, PageHeader, Select, Table, TricefyBadge } from "@/components/ui";
 
 export default async function TricefyPage({ searchParams }: PageProps<"/tricefy">) {
   const f = toFilters(await searchParams);
   const today = todayDate();
-  const [rows, customers, packages] = await Promise.all([listTricefy(f, today), customerOptions(), packageOptions("TRICEFY")]);
+  const [rows, customers] = await Promise.all([listTricefy(f, today), customerOptions()]);
   const qs = new URLSearchParams(f as Record<string, string>).toString();
   return (
     <>
@@ -28,12 +28,6 @@ export default async function TricefyPage({ searchParams }: PageProps<"/tricefy"
               <option value="KEDALUWARSA">Kedaluwarsa</option>
             </Select>
           </FilterField>
-          <FilterField label="Package">
-            <Select name="package" defaultValue={f.package ?? ""} className="w-40">
-              <option value="">Semua</option>
-              {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
-          </FilterField>
           <FilterField label="Riwayat">
             <Select name="history" defaultValue={f.history ?? ""} className="w-44">
               <option value="">Terbaru per akun</option>
@@ -43,12 +37,11 @@ export default async function TricefyPage({ searchParams }: PageProps<"/tricefy"
         </FilterBar>
         {rows.length === 0 ? <Empty>Belum ada langganan Tricefy.</Empty> : (
           <Table>
-            <thead><tr><th>Customer / ID Tricefy</th><th>Package</th><th>Alat (SN)</th><th>Aktivasi</th><th>Berakhir</th><th>Status</th></tr></thead>
+            <thead><tr><th>Customer / ID Tricefy</th><th>Alat (SN)</th><th>Aktivasi</th><th>Berakhir</th><th>Status</th></tr></thead>
             <tbody>
               {rows.map((s) => (
                 <tr key={s.id}>
                   <td><Link className="font-medium text-teal-800 hover:underline" href={`/tricefy/accounts/${s.accountId}`}>{s.account.customer.name}</Link><div className="font-mono text-xs text-slate-500">{s.account.tricefyId}</div></td>
-                  <td>{s.package?.name ?? "-"}{s.quantity ? <span className="text-xs text-slate-500"> · {s.quantity}</span> : null}</td>
                   <td className="font-mono text-xs">{s.devices.map((d) => d.device.serialNumber).join(", ") || "-"}</td>
                   <td className="whitespace-nowrap">{tanggal(s.activationDate)}</td>
                   <td className="whitespace-nowrap">{tanggal(s.endDate)}</td>

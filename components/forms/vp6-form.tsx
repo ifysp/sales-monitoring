@@ -7,9 +7,9 @@ import type { Vp6Installation } from "@/generated/prisma/client";
 
 type Opt = { id: number; label: string; sub?: string };
 
-export function Vp6Form({ customer, devices, pcs, orders, packages, inst, selDevices = [], selPcs = [], orderId, here }: {
+export function Vp6Form({ customer, devices, pcs, orders, inst, selDevices = [], selPcs = [], orderId, here }: {
   customer: { id: number; name: string };
-  devices: Opt[]; pcs: (Opt & { role: string })[]; orders: Opt[]; packages: Opt[];
+  devices: Opt[]; pcs: (Opt & { role: string })[]; orders: Opt[];
   inst?: Vp6Installation; selDevices?: number[]; selPcs?: number[]; orderId?: number; here: string;
 }) {
   const back = encodeURIComponent(here);
@@ -24,20 +24,12 @@ export function Vp6Form({ customer, devices, pcs, orders, packages, inst, selDev
         <Field label="Versi ViewPoint 6 *" hint={inst ? "Ubah versi lewat tombol Catat upgrade" : "mis. 6.12"}>
           <Input name="currentVersion" defaultValue={inst?.currentVersion} required readOnly={!!inst} className={inst ? "bg-slate-50" : ""} />
         </Field>
-        <Field label="Package / modul">
-          <Select name="packageId" defaultValue={inst?.packageId ?? ""}>
-            <option value="">—</option>
-            {packages.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </Select>
-        </Field>
-        <Field label="Jumlah lisensi"><Input type="number" min={1} name="licenseQty" defaultValue={inst?.licenseQty ?? ""} /></Field>
         <Field label="Purchase Order" className="sm:col-span-2">
           <Select name="orderId" defaultValue={inst?.orderId ?? orderId ?? ""}>
             <option value="">— belum ada PO —</option>
             {orders.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </Select>
         </Field>
-        <Field label="Harga (Rp)"><Input type="number" min={0} name="price" defaultValue={inst?.price ? Number(inst.price) : ""} /></Field>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">

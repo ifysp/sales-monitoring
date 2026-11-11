@@ -68,12 +68,15 @@ export function ConfirmDelete({
   label = "Hapus",
   what,
   small = true,
+  verb = "Hapus",
 }: {
   action: () => Promise<ActionState | void>;
   label?: string;
   what: string;
   small?: boolean;
+  verb?: "Hapus" | "Batalkan";
 }) {
+  const word = verb === "Hapus" ? "HAPUS" : "BATAL";
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -86,9 +89,9 @@ export function ConfirmDelete({
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => !busy && setOpen(false)}>
           <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold text-slate-900">Hapus {what}?</h3>
+            <h3 className="font-semibold text-slate-900">{verb} {what}?</h3>
             <p className="mt-2 text-sm text-slate-600">
-              Tindakan ini dicatat di audit log. Ketik <b>HAPUS</b> untuk konfirmasi.
+              Tindakan ini dicatat di log perubahan. Ketik <b>{word}</b> untuk konfirmasi.
             </p>
             <input
               autoFocus
@@ -104,7 +107,7 @@ export function ConfirmDelete({
               <button
                 type="button"
                 className={buttonClass("danger")}
-                disabled={text !== "HAPUS" || busy}
+                disabled={text !== word || busy}
                 onClick={async () => {
                   setBusy(true);
                   try {
@@ -123,7 +126,7 @@ export function ConfirmDelete({
                   }
                 }}
               >
-                {busy ? "Menghapus…" : "Hapus"}
+                {busy ? "Memproses…" : verb}
               </button>
             </div>
           </div>

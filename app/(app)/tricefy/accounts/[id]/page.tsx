@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { deleteSubscription, deleteTricefyAccount } from "@/app/actions/products";
 import { tricefyStatus } from "@/lib/tricefy";
-import { addDays, rupiah, tanggal, toInputDate, todayDate } from "@/lib/format";
+import { addDays, tanggal, toInputDate, todayDate } from "@/lib/format";
 import { ConfirmDelete } from "@/components/client";
 import { Card, DL, Empty, LinkButton, PageHeader, Table, TricefyBadge } from "@/components/ui";
 import { TricefyAccountForm } from "@/components/forms/tricefy-forms";
@@ -41,7 +41,6 @@ export default async function TricefyAccountPage({ params }: PageProps<"/tricefy
           {latest && st ? (
             <DL items={[
               ["Status", <TricefyBadge key="s" status={st.status} daysLeft={st.daysLeft} />],
-              ["Package", latest.package?.name],
               ["Aktivasi", tanggal(latest.activationDate)],
               ["Berakhir", tanggal(latest.endDate)],
               ["Alat", latest.devices.map((d) => d.device.serialNumber).join(", ")],
@@ -52,16 +51,14 @@ export default async function TricefyAccountPage({ params }: PageProps<"/tricefy
         <Card title="Riwayat langganan & perpanjangan" className="xl:col-span-2">
           {a.subscriptions.length === 0 ? <Empty>Belum ada langganan.</Empty> : (
             <Table>
-              <thead><tr><th>Aktivasi – berakhir</th><th>Package</th><th>PO</th><th className="text-right">Harga</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Aktivasi – berakhir</th><th>PO</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 {a.subscriptions.map((s) => {
                   const ss = tricefyStatus(s.endDate, today);
                   return (
                     <tr key={s.id}>
                       <td className="whitespace-nowrap">{tanggal(s.activationDate)} – {tanggal(s.endDate)}<div className="text-xs text-slate-500">{s.devices.map((d) => d.device.serialNumber).join(", ")}</div></td>
-                      <td>{s.package?.name ?? "-"}{s.quantity ? ` · ${s.quantity}` : ""}</td>
                       <td>{s.order ? <Link className="text-teal-800 hover:underline" href={`/orders/${s.order.id}`}>{s.order.poNumber}</Link> : "-"}</td>
-                      <td className="text-right">{rupiah(s.price)}</td>
                       <td><TricefyBadge status={ss.status} daysLeft={ss.daysLeft} /></td>
                       <td className="whitespace-nowrap text-right">
                         <LinkButton small variant="ghost" href={`/tricefy/subscriptions/${s.id}/edit`}>Edit</LinkButton>

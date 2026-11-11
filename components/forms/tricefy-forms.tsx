@@ -24,10 +24,10 @@ export function TricefyAccountForm({ customer, account }: { customer: { id: numb
   );
 }
 
-export function SubscriptionForm({ account, devices, orders, packages, sub, prefill, selDevices = [], orderId, here }: {
+export function SubscriptionForm({ account, devices, orders, sub, prefill, selDevices = [], orderId, here }: {
   account: { id: number; tricefyId: string; customerId: number; customerName: string };
-  devices: Opt[]; orders: Opt[]; packages: Opt[];
-  sub?: TricefySubscription; prefill?: Partial<{ activationDate: Date; packageId: number | null; quantity: number | null }>;
+  devices: Opt[]; orders: Opt[];
+  sub?: TricefySubscription; prefill?: Partial<{ activationDate: Date }>;
   selDevices?: number[]; orderId?: number; here: string;
 }) {
   return (
@@ -36,13 +36,6 @@ export function SubscriptionForm({ account, devices, orders, packages, sub, pref
       {sub && <input type="hidden" name="id" value={sub.id} />}
       <p className="text-sm text-slate-600">Customer: <b>{account.customerName}</b> · Akun Tricefy <span className="font-mono">{account.tricefyId}</span></p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Package">
-          <Select name="packageId" defaultValue={sub?.packageId ?? prefill?.packageId ?? ""}>
-            <option value="">—</option>
-            {packages.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </Select>
-        </Field>
-        <Field label="Jumlah (studies/scanner)" hint="Kosongkan bila unlimited"><Input type="number" min={1} name="quantity" defaultValue={sub?.quantity ?? prefill?.quantity ?? ""} /></Field>
         <Field label="Purchase Order" className="sm:col-span-2">
           <Select name="orderId" defaultValue={sub?.orderId ?? orderId ?? ""}>
             <option value="">— belum ada PO —</option>
@@ -53,7 +46,6 @@ export function SubscriptionForm({ account, devices, orders, packages, sub, pref
         <Field label="Tanggal kontrak"><Input type="date" name="contractDate" defaultValue={toInputDate(sub?.contractDate)} /></Field>
         <Field label="Tanggal aktivasi *"><Input type="date" name="activationDate" defaultValue={toInputDate(sub?.activationDate ?? prefill?.activationDate)} required /></Field>
         <Field label="Tanggal berakhir" hint="Kosongkan = otomatis aktivasi + 3 tahun"><Input type="date" name="endDate" defaultValue={toInputDate(sub?.endDate)} /></Field>
-        <Field label="Harga (Rp)"><Input type="number" min={0} name="price" defaultValue={sub?.price ? Number(sub.price) : ""} /></Field>
       </div>
       <fieldset className="rounded-md border border-slate-200 p-3">
         <legend className="px-1 text-sm font-medium">Alat USG yang tercakup</legend>

@@ -20,7 +20,7 @@ CREATE TYPE "PaymentMethod" AS ENUM ('CASH', 'CICILAN');
 CREATE TYPE "TechNoteKind" AS ENUM ('INTEGRASI', 'PREFERENSI_DOKTER', 'QUICK_REPORT', 'JURNAL_GRAFIK', 'LAINNYA');
 
 -- CreateEnum
-CREATE TYPE "AttachmentKind" AS ENUM ('PO', 'BERITA_ACARA', 'FAKTUR', 'INVOICE', 'BUKTI_BAYAR', 'ERROR', 'LAINNYA');
+CREATE TYPE "AttachmentKind" AS ENUM ('PO', 'INVOICE', 'BERITA_ACARA', 'TANDA_TERIMA', 'FAKTUR', 'BUKTI_BAYAR', 'ERROR', 'LAINNYA');
 
 -- CreateTable
 CREATE TABLE "users" (
@@ -56,7 +56,6 @@ CREATE TABLE "packages" (
     "product" "Product" NOT NULL,
     "name" TEXT NOT NULL,
     "unit" TEXT,
-    "listPrice" DECIMAL(15,2),
     "active" BOOLEAN NOT NULL DEFAULT true,
 
     CONSTRAINT "packages_pkey" PRIMARY KEY ("id")
@@ -70,17 +69,6 @@ CREATE TABLE "machine_models" (
     "active" BOOLEAN NOT NULL DEFAULT true,
 
     CONSTRAINT "machine_models_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "stages" (
-    "id" SERIAL NOT NULL,
-    "name" TEXT NOT NULL,
-    "sortOrder" INTEGER NOT NULL,
-    "isPayment" BOOLEAN NOT NULL DEFAULT false,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-
-    CONSTRAINT "stages_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -143,9 +131,12 @@ CREATE TABLE "purchase_orders" (
     "poNumber" TEXT NOT NULL,
     "poDate" DATE NOT NULL,
     "paymentMethod" "PaymentMethod" NOT NULL DEFAULT 'CASH',
-    "amount" DECIMAL(15,2) NOT NULL,
-    "ppnPercent" DECIMAL(5,2),
-    "specialNotes" TEXT,
+    "invoiceNumber" TEXT,
+    "invoiceDate" DATE,
+    "finalAmount" DECIMAL(15,2),
+    "baDate" DATE,
+    "tukarFakturDate" DATE,
+    "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "deletedAt" TIMESTAMP(3),
@@ -154,12 +145,10 @@ CREATE TABLE "purchase_orders" (
 );
 
 -- CreateTable
-CREATE TABLE "invoices" (
+CREATE TABLE "payments" (
     "id" SERIAL NOT NULL,
     "orderId" INTEGER NOT NULL,
     "sequence" INTEGER NOT NULL,
-    "invoiceNumber" TEXT,
-    "invoiceDate" DATE,
     "amount" DECIMAL(15,2) NOT NULL,
     "dueDate" DATE NOT NULL,
     "paidAt" DATE,
@@ -167,18 +156,7 @@ CREATE TABLE "invoices" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "invoices_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "po_stages" (
-    "id" SERIAL NOT NULL,
-    "orderId" INTEGER NOT NULL,
-    "stageId" INTEGER NOT NULL,
-    "completedAt" DATE,
-    "note" TEXT,
-
-    CONSTRAINT "po_stages_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "payments_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -192,7 +170,6 @@ CREATE TABLE "vp6_installations" (
     "currentVersion" TEXT NOT NULL,
     "apps" TEXT,
     "specialConfig" TEXT,
-    "price" DECIMAL(15,2),
     "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -255,7 +232,6 @@ CREATE TABLE "tricefy_subscriptions" (
     "contractDate" DATE,
     "activationDate" DATE NOT NULL,
     "endDate" DATE NOT NULL,
-    "price" DECIMAL(15,2),
     "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -302,7 +278,7 @@ CREATE TABLE "error_logs" (
 CREATE TABLE "attachments" (
     "id" SERIAL NOT NULL,
     "orderId" INTEGER,
-    "invoiceId" INTEGER,
+    "paymentId" INTEGER,
     "errorLogId" INTEGER,
     "kind" "AttachmentKind" NOT NULL DEFAULT 'LAINNYA',
     "fileName" TEXT NOT NULL,
@@ -340,19 +316,16 @@ CREATE INDEX "pcs_customerId_idx" ON "pcs"("customerId");
 CREATE UNIQUE INDEX "purchase_orders_poNumber_key" ON "purchase_orders"("poNumber");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "purchase_orders_invoiceNumber_key" ON "purchase_orders"("invoiceNumber");
+
+-- CreateIndex
 CREATE INDEX "purchase_orders_customerId_idx" ON "purchase_orders"("customerId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "invoices_invoiceNumber_key" ON "invoices"("invoiceNumber");
+CREATE UNIQUE INDEX "payments_orderId_sequence_key" ON "payments"("orderId", "sequence");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "invoices_orderId_sequence_key" ON "invoices"("orderId", "sequence");
-
--- CreateIndex
-CREATE INDEX "invoices_dueDate_idx" ON "invoices"("dueDate");
-
--- CreateIndex
-CREATE UNIQUE INDEX "po_stages_orderId_stageId_key" ON "po_stages"("orderId", "stageId");
+CREATE INDEX "payments_dueDate_idx" ON "payments"("dueDate");
 
 -- CreateIndex
 CREATE INDEX "vp6_installations_customerId_idx" ON "vp6_installations"("customerId");
@@ -400,13 +373,7 @@ ALTER TABLE "pcs" ADD CONSTRAINT "pcs_customerId_fkey" FOREIGN KEY ("customerId"
 ALTER TABLE "purchase_orders" ADD CONSTRAINT "purchase_orders_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "invoices" ADD CONSTRAINT "invoices_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "purchase_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "po_stages" ADD CONSTRAINT "po_stages_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "purchase_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "po_stages" ADD CONSTRAINT "po_stages_stageId_fkey" FOREIGN KEY ("stageId") REFERENCES "stages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "payments" ADD CONSTRAINT "payments_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "purchase_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "vp6_installations" ADD CONSTRAINT "vp6_installations_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -463,7 +430,7 @@ ALTER TABLE "error_logs" ADD CONSTRAINT "error_logs_deviceId_fkey" FOREIGN KEY (
 ALTER TABLE "attachments" ADD CONSTRAINT "attachments_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "purchase_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "attachments" ADD CONSTRAINT "attachments_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "invoices"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "attachments" ADD CONSTRAINT "attachments_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "payments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "attachments" ADD CONSTRAINT "attachments_errorLogId_fkey" FOREIGN KEY ("errorLogId") REFERENCES "error_logs"("id") ON DELETE CASCADE ON UPDATE CASCADE;

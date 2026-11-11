@@ -5,10 +5,6 @@ import { tricefyStatus, type TricefyStatus } from "@/lib/tricefy";
 import { dateVal } from "@/lib/forms";
 import type { Prisma } from "@/generated/prisma/client";
 
-export async function activeStages() {
-  return prisma.stage.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } });
-}
-
 export type Filters = Record<string, string | undefined>;
 
 // Ubah searchParams Next.js menjadi objek string sederhana
@@ -28,37 +24,27 @@ const ci = (q: string) => ({ contains: q, mode: "insensitive" as const });
 export async function listOrders(f: Filters = {}, take?: number) {
   const where: Prisma.PurchaseOrderWhereInput = {
     deletedAt: null,
-    ...(f.q ? { OR: [{ poNumber: ci(f.q) }, { customer: { name: ci(f.q) } }, { invoices: { some: { invoiceNumber: ci(f.q) } } }] } : {}),
+    ...(f.q ? { OR: [{ poNumber: ci(f.q) }, { invoiceNumber: ci(f.q) }, { customer: { name: ci(f.q) } }] } : {}),
     ...(f.customer ? { customerId: Number(f.customer) } : {}),
     ...(f.method === "CASH" || f.method === "CICILAN" ? { paymentMethod: f.method } : {}),
     ...(dateRange(f) ? { poDate: dateRange(f) } : {}),
   };
-  const [stages, orders] = await Promise.all([
-    activeStages(),
-    prisma.purchaseOrder.findMany({
-      where,
-      include: {
-        customer: { select: { id: true, name: true } },
-        stages: true,
-        invoices: { orderBy: { sequence: "asc" } },
-        vp6Installations: { where: { deletedAt: null }, select: { id: true } },
-        tricefySubscriptions: { where: { deletedAt: null }, select: { id: true } },
-      },
-      orderBy: { poDate: "desc" },
-      take,
-    }),
-  ]);
+  const orders = await prisma.purchaseOrder.findMany({
+    where,
+    include: {
+      customer: { select: { id: true, name: true } },
+      payments: { orderBy: { sequence: "asc" } },
+      attachments: { select: { kind: true, paymentId: true } },
+      vp6Installations: { where: { deletedAt: null }, select: { id: true } },
+      tricefySubscriptions: { where: { deletedAt: null }, select: { id: true } },
+    },
+    orderBy: { poDate: "desc" },
+    take,
+  });
   const rows = orders.map((o) => {
-    const invoiced = o.invoices.reduce((s, i) => s + Number(i.amount), 0);
-    const paid = o.invoices.filter((i) => i.paidAt).reduce((s, i) => s + Number(i.amount), 0);
-    return {
-      ...o,
-      amountNum: Number(o.amount),
-      invoiced,
-      paid,
-      remaining: Number(o.amount) - invoiced,
-      progress: computeProgress(stages, o.stages, o.invoices),
-    };
+    const amount = o.finalAmount === null ? null : Number(o.finalAmount);
+    const paid = o.payments.filter((p) => p.paidAt).reduce((s, p) => s + Number(p.amount), 0);
+    return { ...o, amount, paid, remaining: amount === null ? null : amount - paid, progress: computeProgress(o) };
   });
   if (f.status === "open") return rows.filter((r) => !r.progress.complete);
   if (f.status === "done") return rows.filter((r) => r.progress.complete);
@@ -66,17 +52,17 @@ export async function listOrders(f: Filters = {}, take?: number) {
 }
 export type OrderRow = Awaited<ReturnType<typeof listOrders>>[number];
 
-// ───────────── Invoice ─────────────
-export async function listInvoices(f: Filters = {}, today: Date) {
-  const where: Prisma.InvoiceWhereInput = {
+// ───────────── Penagihan (termin) ─────────────
+export async function listPayments(f: Filters = {}, today: Date) {
+  const where: Prisma.PaymentWhereInput = {
     order: { deletedAt: null, ...(f.customer ? { customerId: Number(f.customer) } : {}) },
-    ...(f.q ? { OR: [{ invoiceNumber: ci(f.q) }, { order: { poNumber: ci(f.q) } }, { order: { customer: { name: ci(f.q) } } }] } : {}),
+    ...(f.q ? { OR: [{ order: { invoiceNumber: ci(f.q) } }, { order: { poNumber: ci(f.q) } }, { order: { customer: { name: ci(f.q) } } }] } : {}),
     ...(f.status === "paid" ? { paidAt: { not: null } } : {}),
     ...(f.status === "unpaid" ? { paidAt: null } : {}),
     ...(f.status === "overdue" ? { paidAt: null, dueDate: { lt: today } } : {}),
     ...(dateRange(f) ? { dueDate: dateRange(f) } : {}),
   };
-  return prisma.invoice.findMany({
+  return prisma.payment.findMany({
     where,
     include: { order: { include: { customer: { select: { id: true, name: true } } } }, _count: { select: { attachments: true } } },
     orderBy: [{ dueDate: "asc" }],
@@ -150,7 +136,6 @@ export async function listVp6(f: Filters = {}) {
       ...(f.q ? { OR: [{ customer: { name: ci(f.q) } }, { customer: { geSiteId: ci(f.q) } }, { apps: ci(f.q) }, { devices: { some: { device: { serialNumber: ci(f.q) } } } }] } : {}),
       ...(f.customer ? { customerId: Number(f.customer) } : {}),
       ...(f.version ? { currentVersion: f.version } : {}),
-      ...(f.package ? { packageId: Number(f.package) } : {}),
       ...(dateRange(f) ? { installDate: dateRange(f) } : {}),
     },
     include: {
@@ -178,7 +163,6 @@ export async function listTricefy(f: Filters = {}, today: Date) {
       deletedAt: null,
       account: { deletedAt: null, customer: { deletedAt: null }, ...(f.customer ? { customerId: Number(f.customer) } : {}) },
       ...(f.q ? { OR: [{ account: { tricefyId: ci(f.q) } }, { account: { customer: { name: ci(f.q) } } }, { devices: { some: { device: { serialNumber: ci(f.q) } } } }] } : {}),
-      ...(f.package ? { packageId: Number(f.package) } : {}),
       ...(dateRange(f) ? { activationDate: dateRange(f) } : {}),
     },
     include: {
@@ -199,6 +183,3 @@ export async function customerOptions() {
   return prisma.customer.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true, geSiteId: true } });
 }
 
-export async function packageOptions(product: "VIEWPOINT" | "TRICEFY") {
-  return prisma.package.findMany({ where: { product, active: true }, orderBy: { name: "asc" } });
-}
